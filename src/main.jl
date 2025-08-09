@@ -1,8 +1,12 @@
 using Dates
 using JSON
 
+# Include util functions
 include("../utils/plugboard.jl")
 using .Plugboard
+
+include("../utils/ProgressBar.jl")
+using .ProgressBar
 
 include("../scripts/PINN.jl")
 using .PINN
@@ -55,68 +59,73 @@ end
 #  We want each training run to follow these batch sizes [1, 10, 50, 100]
 #   lets make this an array babyyy
 =#
-function run_training_sequence(batch_sizes::Array{Int})
-  """
-  Runs a sequence of training runs with different training example configurations.
 
+function init_batches(batch_sizes::Array{Int})
+  """
+  Initializes batches by generating datasets for different batch sizes.
   Args:
-      training_examples_array: Array of arrays, where each inner array contains
-                             the training examples for that particular training run
+      batch_sizes: Array of integers representing different batch sizes
   """
   for (batch_index, k) in enumerate(batch_sizes)
-    s::Settings = Plugboard.Settings(1, 0, k)
+    # set up plugboard for solutions to ay' + by = 0 where a,b != 0
+    s::Settings = Plugboard.Settings(5, 5, k)
     println("Batch size:", k)
-
-    println("Batch_sizes length", length(batch_sizes))
-
     Plugboard.generate_random_ode_dataset(s, batch_index) # training data
-    # Plugboard.generate_random_ode_dataset(s, batch_index) # create the validation file
-
-
-    # TODO: have a variable that defines dataset.json and benchmark.json
-
-    dataset = JSON.parsefile("./data/dataset.json")
-
+    # Plugboard.generate_random_ode_dataset(s, batch_index) # mayb create the validation JSON data
     # Create the training dirs
     run_number_formatted = lpad(batch_index, 2, '0')
     println("Beginining training run for:", batch_index)
-
     println("\n" * "="^50)
     println("Starting Training Run $run_number_formatted")
     println("="^50)
-
     setup_training_run(batch_index, k)
+  end
+end
 
-    test = dataset[run_number_formatted]
-    println("Processing alpha matrix: $test")
+function run_training_sequence(batch_sizes::Array{Int})
+  """
+  Runs a sequence of training runs with different training example configurations.
+  Args:
+      batch_sizes: Array of integers representing different batch sizes
+  """
+  # Initialize all batches first
+  init_batches(batch_sizes)
 
-    # Loop through each entry in the JSON object
-    for (run_idx, (alpha_matrix_key, series_coeffs)) in enumerate(dataset)
+  # Load the generated dataset
+  dataset = JSON.parsefile("./data/dataset.json")
 
-      # println("Series coefficients: $series_coeffs")
+  # Loop through each entry in the JSON object
+  # This is the code that is not working. Alpha matrix is seen as a number.
+  for (run_idx, inner_dict) in dataset
+    for (alpha_matrix_key, series_coeffs) in inner_dict
+      # TODO: We need to setup the pinn training here
+      println("Series coefficients that will be trained soon...: $series_coeffs") # lil error checking
+      println("This is the alpha matrix: $alpha_matrix_key")
+      println("Current training run: $run_idx")
 
       # Convert string key back to matrix
       alpha_matrix = eval(Meta.parse(alpha_matrix_key))
-
-      settings = PINNSettings(64, 1234, ode_matrices, 500, 100)
+      settings = PINNSettings(64, 1234, alpha_matrix, 500, 100)
 
       # Train the network
-      p_trained, coeff_net, st = train_pinn(settings, data_dict)
+      p_trained, coeff_net, st = train_pinn(settings, series_coeffs)
+      sample_matrix = [1;
+        1]
 
       # Evaluate results
       a_learned, u_func = evaluate_solution(p_trained, coeff_net, st, sample_matrix)
-
+      println(a_learned)
+      println(u_func)
       # TODO: Add the training implementation for the PINN Here
       # PINN training here using:
       # - alpha_matrix (converted from key)
       # - series_coeffs as target
       # - ASK VICTOR HOW TO IMPLEMENT THE PINN WITH THIS
-      println("Ready for PINN training with this alpha matrix and series coefficients...")
     end
   end
 end
 
-batch = [1, 10, 100]
+batch = [1, 1]
 
 # Uncomment to run the example
 run_training_sequence(batch)

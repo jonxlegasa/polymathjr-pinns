@@ -48,7 +48,7 @@ F = Float32
 struct PINNSettings
   neuron_num::Int
   seed::Int
-  ode_matrix::Array
+  ode_matrix::Matrix{Int64}
   maxiters_adam::Int
   maxiters_lbfgs::Int
 end

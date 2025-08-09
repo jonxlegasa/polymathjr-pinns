@@ -227,7 +227,6 @@ end
 maxiters = 500 # The total number of training iterations.
 p_one::ProgressBarSettings = ProgressBar.ProgressBarSettings(maxiters, "Adam Training...") # first progress bar setting
 callback_one = ProgressBar.Bar(p_one)
-
 # Define the optimization problem. We specify the loss function, the initial parameters,
 # and the automatic differentiation backend (Zygote), which calculates the gradients.
 adtype = Optimization.AutoZygote()
