@@ -1,9 +1,17 @@
 using Dates
+using JSON
 
+# Include util functions
 include("../utils/plugboard.jl")
 using .Plugboard
 
-function setup_training_run(run_number::Int, training_examples::Vector{Int})
+include("../utils/ProgressBar.jl")
+using .ProgressBar
+
+include("../scripts/PINN.jl")
+using .PINN
+
+function setup_training_run(run_number::Int64, batch_size::Any)
   """
   Creates a training run directory and output file with specified naming convention.
   Args:
@@ -28,7 +36,6 @@ function setup_training_run(run_number::Int, training_examples::Vector{Int})
 
   # Generate output file with training run information
   output_file = joinpath(training_run_dir, "training_info.txt")
-
   # Get current date and time
   current_datetime = now()
 
@@ -37,7 +44,7 @@ function setup_training_run(run_number::Int, training_examples::Vector{Int})
     println(file, "Training Run Information")
     println(file, "="^30)
     println(file, "Training Run Number: $run_number_formatted")
-    println(file, "Training Examples per Model: $training_examples")
+    println(file, "Training Examples per Model: $batch_size")
     println(file, "Training Run Commenced: $current_datetime")
     println(file, "="^30)
   end
@@ -48,39 +55,94 @@ function setup_training_run(run_number::Int, training_examples::Vector{Int})
   return training_run_dir, output_file
 end
 
-function run_training_sequence(training_examples_array::Vector{Vector{Int}})
-  """
-  Runs a sequence of training runs with different training example configurations.
+#=
+# Notes: 
+#  We want each training run to follow these batch sizes [1, 10, 50, 100]
+#   lets make this an array babyyy
+=#
 
+function init_batches(batch_sizes::Array{Int})
+  """
+  Initializes batches by generating datasets for different batch sizes.
   Args:
-      training_examples_array: Array of arrays, where each inner array contains
-                             the training examples for that particular training run
+      batch_sizes: Array of integers representing different batch sizes
   """
+  for (batch_index, k) in enumerate(batch_sizes)
+    # set up plugboard for solutions to ay' + by = 0 where a,b != 0
 
-  for (run_idx, training_examples) in enumerate(training_examples_array)
+    run_number_formatted = lpad(batch_index, 2, '0')
+    s::Settings = Plugboard.Settings(2, 2, k)
+
     println("\n" * "="^50)
-    println("Starting Training Run $run_idx")
+    println("Generating datasets for training run $run_number_formatted")
     println("="^50)
+    println("Number of examples: ", k)
 
-    # Setup the training run directory and files
-    training_dir, info_file = setup_training_run(run_idx, training_examples)
-
-    # Here you would add your training loop logic
-    # For now, we'll just simulate with a comment
-    println("Training examples for this run: $training_examples")
-    println("Ready for training implementation...")
-
-    # TODO: Add the training implementation for the PINN Here
-    # for num_examples in training_examples
-    # PINN training here
-    # end
+    Plugboard.generate_random_ode_dataset(s, batch_index) # training data
+    # Plugboard.generate_random_ode_dataset(s, batch_index) # maybe create the validation JSON data
+    # Create the training dirs
+    println("\n" * "="^50)
+    println("Starting Training Run $run_number_formatted")
+    println("="^50)
+    setup_training_run(batch_index, k)
   end
 end
 
-# Example usage:
-# Define training examples for multiple runs
-example_training_runs = [
-  [4.0, -5.0, 3.125, -0.6510416666666666, 0.03390842013888889, -0.0003532127097800926, 6.13216510034883e-7, -1.5208742808404835e-10, 4.715012031375507e-15, -1.624163646169363e-20], # training run #01
-]
+function run_training_sequence(batch_sizes::Array{Int})
+  """
+  Runs a sequence of training runs with different training example configurations.
+  Args:
+      batch_sizes: Array of integers representing different batch sizes
+  """
+  # Initialize all batches first
+  init_batches(batch_sizes)
 
-run_training_sequence(example_training_runs)
+  # Load the generated dataset
+  dataset = JSON.parsefile("./data/dataset.json")
+
+  # Loop through each entry in the JSON object
+  # This is the code that is not working. Alpha matrix is seen as a number.
+  for (run_idx, inner_dict) in dataset
+    println(inner_dict)
+    for (alpha_matrix_key, series_coeffs) in inner_dict
+      # TODO: We need to setup the pinn training here
+      println("Series coefficients that will be trained soon...: $series_coeffs") # lil error checking
+      println("This is the alpha matrix: $alpha_matrix_key")
+      println("Current training run: $run_idx")
+
+      # Convert string key back to matrix
+      alpha_matrix = eval(Meta.parse(alpha_matrix_key))
+      settings = PINNSettings(64, 1234, alpha_matrix, 500, 100)
+
+      #=
+      # Train the network
+      p_trained, coeff_net, st = train_pinn(settings, series_coeffs)
+      sample_matrix = [1;
+        1]
+
+      # Evaluate results
+      a_learned, u_func = evaluate_solution(p_trained, coeff_net, st, sample_matrix)
+      println(a_learned)
+      println(u_func)
+
+      =#
+
+
+
+      # TODO: Add the training implementation for the PINN Here
+      # PINN training here using:
+      # - alpha_matrix (converted from key)
+      # - series_coeffs as target
+      # - ASK VICTOR HOW TO IMPLEMENT THE PINN WITH THIS
+    end
+  end
+end
+
+# making the array large will increase number of training runs.
+# each entry of the array is an interger that determines the # of examples generated in 
+# each training run
+
+batch = [1, 1, 1]
+
+# Uncomment to run the example
+run_training_sequence(batch)
