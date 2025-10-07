@@ -108,7 +108,7 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
 
   # Generate dataset_size examples
   for example_k in 1:s.dataset_size
-    α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree)
+    α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
     println("\n--- Example #$example_k ---")
     println("α matrix:")
     display(α_matrix)
@@ -144,7 +144,7 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
       end
 
       # use alpha matrix as key, series coefficients as value within the dataset batch
-      existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems
+      existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems 
 
       isdir("data") || mkpath("data") # ensure a data folder exists
       json_string = JSON.json(existing_data)

@@ -99,16 +99,30 @@ function run_training_sequence(batch_sizes::Array{Int})
   # loop through each training run and pass in the series coefficients 
   # and its corresponding ODE embedding
   for (run_idx, inner_dict) in dataset
-    settings = PINNSettings(64, 1234, inner_dict, 500, 100) # 64 neurons, blah blah
+
+    outer_dict = Dict{Matrix{Int}, Any}()
+  
+    # Convert the alpha matrix keys from strings to matrices
+    # Because zygote is being mean
+    for (alpha_matrix_key, series_coeffs) in inner_dict
+      # println("The current  ODE I am calculating the loss for right now: ", alpha_matrix_key)
+      # println("The local loss is locally lossing...")
+      alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix 
+      outer_dict[alpha_matrix] = series_coeffs
+    end
+
+    settings = PINNSettings(64, 1234, outer_dict, 500, 100) # 64 neurons, blah blah
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings) # this is where we call the training process
+   
+    # TODO: Call the plugboard once here without training directories (validation runs)
     sample_matrix = [1; -1] # this is the matrix we test the solution for. 
     # The solution is y = e^x + C
-
+    # CALL GLOBAL LOSS HERE WITH 
     # Evaluate results
     a_learned, u_func = evaluate_solution(p_trained, coeff_net, st, sample_matrix)
-    println(a_learned)
-    println(u_func)
+    # println(a_learned)
+    # println(u_func)
   end
 end
 
@@ -116,7 +130,7 @@ end
 # each entry of the array is an interger that determines the # of examples generated in 
 # each training run
 
-batch = [1, 2, 100]
+batch = [1, 2, 3]
 
 # Uncomment to run the example
 run_training_sequence(batch) # we first start here with the "foreign call" error

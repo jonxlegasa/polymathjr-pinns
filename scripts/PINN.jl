@@ -48,7 +48,7 @@ F = Float32
 struct PINNSettings
   neuron_num::Int
   seed::Int
-  ode_matrices::Dict{String, Any} # from the specific training run that is specified by the run number
+  ode_matrices::Dict{Any, Any} # from the specific training run that is specified by the run number
   maxiters_adam::Int
   maxiters_lbfgs::Int
 end
@@ -103,7 +103,7 @@ function initialize_network(settings::PINNSettings)
   # Find the maximum matrix dimensions for input layer size
   # alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert to string
 
-  max_input_size = maximum(prod(size(eval(Meta.parse(alpha_matrix_key)))) for (alpha_matrix_key, series_coeffs) in settings.ode_matrices) # AHHHHH! what a messs
+  max_input_size = maximum(prod(size(alpha_matrix_key)) for (alpha_matrix_key, series_coeffs) in settings.ode_matrices) # AHHHHH! what a messs
 
   # Define the neural network architecture using the settings
   coeff_net = Lux.Chain(
@@ -114,10 +114,14 @@ function initialize_network(settings::PINNSettings)
   # Initialize the network's parameters with the specified seed
   rng = Random.default_rng()
   Random.seed!(rng, settings.seed)
-  p_init, st = Lux.setup(rng, coeff_net)
+  p_init, st = Lux.setup(rng, coeff_net) # this sets the parameters of the Neural Network
 
   # Wrap the initial parameters in a ComponentArray
   p_init_ca = ComponentArray(p_init)
+
+  println("Intializing Neural Network...")
+  println("Parameters: ", p_init_ca)
+  println("Coefficient Network: ", coeff_net)
 
   return coeff_net, p_init_ca, st
 end
@@ -154,23 +158,23 @@ end
 # Step 7: Global Loss Function
 # ---------------------------------------------------------------------------
 
-
-
-function global_loss(p_net, settings::PINNSettings, coeff_net, st) # remove data_dict?
+function global_loss(p_net, settings::PINNSettings, coeff_net, st)
   total_loss = F(0.0)
-  println(settings.ode_matrices) # print out the ode_matrices dictionary
+  # println(settings.ode_matrices) # print out the ode_matrices dictionary
+  # println("The global loss is globally lossing...")
   for (alpha_matrix_key, series_coeffs) in settings.ode_matrices 
-    println("The loss is lossing...")
-    println("The current  ODE I am calculating the loss for", alpha_matrix_key)
-    alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix # the error is also stemming from here too? 
+    # println("The current  ODE I am calculating the loss for right now: ", alpha_matrix_key)
+    # println("The local loss is locally lossing...")
+    # alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix 
+    # the error is coming from line 170. Zygote does not like us editing this in memory perhaps?
     # matrix_flat = reshape(alpha_matrix_key, :, 1)  # Column vector for network, flattening. For some reason this does not work
-    matrix_flat = vec(alpha_matrix)  # Flatten to a column vector
+    matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
     local_loss = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat) # calculate the local loss
-    println(local_loss)
+     # println(local_loss)
     total_loss += local_loss # add up the local loss to find the global loss
   end
 
-  println(total_loss)
+  # println(total_loss)
   return total_loss
 end
 
@@ -238,8 +242,8 @@ function evaluate_solution(p_trained, coeff_net, st, ode_matrix_sample, analytic
 
   a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1]
 
-  println("Learned coefficients:")
-  display(a_learned)
+  # println("Learned coefficients:")
+  # display(a_learned)
 
   # Create prediction function
   u_predict_func(x) = sum(a_learned[i] * x^(i - 1) / fact[i] for i in 1:N+1)
