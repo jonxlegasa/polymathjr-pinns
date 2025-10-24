@@ -52,7 +52,6 @@ Dx   = Differential(x)
 # Define the ordinary differential equation.
 # Dxxx(u(x)) = cos(pi*x)
 equation = Dxxx(u(x)) ~ cos(pi*x)
-
 # Define the boundary conditions for the ODE.
 bcs = [u(0.0) ~ 0.0,        # u(x) at x=0 is 0
        u(1.0) ~ cos(pi),   # u(x) at x=1 is -1

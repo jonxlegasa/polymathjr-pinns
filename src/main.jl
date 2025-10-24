@@ -11,6 +11,9 @@ using .ProgressBar
 include("../utils/ConvertStringToMatrix.jl")
 using .ConvertStringToMatrix
 
+include("../utils/ExperimentsForWeights.jl")
+using.ExperimentsForWeights
+
 include("../scripts/PINN.jl")
 using .PINN
 
@@ -78,8 +81,9 @@ function init_batches(batch_sizes::Array{Int})
       batch_sizes: Array of integers representing different batch sizes
   """
 
+
   # We only generate one benchmark dataset
-  # benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
+  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
   # Plugboard.generate_random_ode_dataset(benchmark_dataset_setting, 1) 
 
   # generate training datasets and benchmarks 
@@ -94,7 +98,7 @@ function init_batches(batch_sizes::Array{Int})
     println("Number of examples: ", k)
     
     # Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # training data
-   # create_training_run_dirs(batch_index, k) # Create the training dirs
+    # create_training_run_dirs(batch_index, k) # Create the training dirs
   end
 end
 
@@ -116,6 +120,73 @@ function run_training_sequence(batch_sizes::Array{Int})
   training_dataset = JSON.parsefile(training_data_dir)
   benchmark_dataset = JSON.parsefile(benchmark_data_dir)
 
+  F = Float32
+  # We will approximate the solution u(x) with a truncated power series of degree N.
+  N = 5 # The degree of the highest power term in the series.
+
+  # Pre-calculate factorials (0!, 1!, ..., N!) for use in the series.
+  num_supervised = 5 # The number of coefficients we will supervise during training.
+  # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
+  num_points = 10
+
+  # Domain boundaries
+  x_left = F(0.0)  # Left boundary of the domain
+  x_right = F(1.0) # Right boundary of the domain
+
+  # Define a weight for the boundary condition, surpivesed coefficients, and the pde
+  supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
+  bc_weight = F(1.0) # for now we are going to test the two of these to zero
+  pde_weight = F(1.0)
+
+  xs = range(x_left, x_right, length=num_points)
+
+  # BS on pde_weight with supervised and bc fixed at 1.0
+  
+  binary_search_weights(
+    training_dataset,
+    :pde,
+    (0.0f0, 100.0f0),
+    20,
+    fixed_weights = (supervised=supervised_weight, bc=bc_weight),
+    num_supervised = num_supervised,
+    N = N,
+    x_left = x_left,
+    x_right = x_right,
+    xs = xs,
+    base_data_dir = "data"
+  )
+
+  # Search on supervised_weight
+  binary_search_weights(
+    training_dataset,
+    :supervised,
+    (0.0f0, 100.0f0),
+    20,
+    fixed_weights = (bc=1.0f0, pde=1.0f0),
+    num_supervised = num_supervised,
+    N = N,
+    x_left = x_left,
+    x_right = x_right,
+    xs = xs,
+    base_data_dir = "data"
+  )
+
+  # Search on bc_weight
+  binary_search_weights(
+    training_dataset,
+    :bc,
+    (0.0f0, 100.0f0),
+    20,
+    fixed_weights = (supervised=1.0f0, pde=1.0f0),
+    num_supervised = num_supervised,
+    N = N,
+    x_left = x_left,
+    x_right = x_right,
+    xs = xs,
+    base_data_dir = "data"
+  )
+
+  #= Uncomment this code if you want to normally run the PINN
   # loop through each training run and pass in the series coefficients 
   # and its corresponding ODE embedding
   for (run_idx, inner_dict) in training_dataset
@@ -123,31 +194,17 @@ function run_training_sequence(batch_sizes::Array{Int})
     # Because zygote is being mean
     ConvertSettings = StringToMatrixSettings(inner_dict)
     converted_dict = ConvertStringToMatrix.convert(ConvertSettings)
-
-    #=
-    This establishes settings for PINN. 64 neurons, a random seed to init
-    parameters, and iterations for training.
-    =#
-    settings = PINNSettings(5, 1234, converted_dict, 500, 100)
+    settings = PINNSettings(5, 1234, converted_dict, 1000, 1000, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings) # this is where we call the training process
  
-    #=
-    this is the matrix we test the solution for. 
-    The solution is y = Ae^x
-    CALL GLOBAL LOSS HERE WITH 
-    =#
-
-    evaluate_solution(p_trained, coeff_net, st, benchmark_dataset["01"])
+    evaluate_solution(settings, p_trained, coeff_net, st, training_dataset["01"])
   end
-end
+  =#
 
-# making the array large will increase number of training runs.
-# each entry of the array is an interger that determines the # of examples generated in 
-# each training run
+end
 
 batch = [1]
 
-# Uncomment to run the example
-run_training_sequence(batch) # we first start here with the "foreign call" error
+run_training_sequence(batch)

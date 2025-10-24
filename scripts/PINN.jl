@@ -54,6 +54,15 @@ struct PINNSettings
   ode_matrices::Dict{Any, Any} # from the specific training run that is specified by the run number
   maxiters_adam::Int
   maxiters_lbfgs::Int
+  n_terms_for_power_series::Int # The degree of the highest power term in the series.
+  num_supervised::Int # The number of coefficients we will supervise during training.
+  num_points::Int # number of points evaluated
+  x_left::Float32 # left boundary 
+  x_right::Float32 # right boundary 
+  supervised_weight::Float32
+  bc_weight::Float32 # for now we are going to test the two of these to zero
+  pde_weight::Float32
+  xs::Any
 end
 
 # We need to have a parameter for the PINN to allow us to swap architectures easily
@@ -65,10 +74,6 @@ end
 @parameters x
 @variables u(..)
 
-# Domain boundaries
-x_left = F(0.0)  # Left boundary of the domain
-x_right = F(1.0) # Right boundary of the domain
-
 # Differential operator
 Dx = Differential(x)
 
@@ -76,7 +81,7 @@ Dx = Differential(x)
 equation = Dx(u(x)) + u(x) ~ 0
 
 # Define the domain over which the ODE is valid.
-domains = [x ∈ Interval(x_left, x_right)]
+# domains = [x ∈ Interval(x_left, x_right)]
 
 # ---------------------------------------------------------------------------
 # Step 4: Setup the Power Series and Neural Network
@@ -87,18 +92,20 @@ N = 5 # The degree of the highest power term in the series.
 
 # Pre-calculate factorials (0!, 1!, ..., N!) for use in the series.
 
-fact = factorial.(big.(0:N))
-
 num_supervised = 5 # The number of coefficients we will supervise during training.
 
 # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
 num_points = 10
-xs = range(x_left, x_right, length=num_points)
+
+
+# Domain boundaries
+x_left = F(0.0)  # Left boundary of the domain
+x_right = F(1.0) # Right boundary of the domain
 
 # Define a weight for the boundary condition, surpivesed coefficients, and the pde
 supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
-bc_weight = F(10.0)
-pde_weight = F(0.0)
+bc_weight = F(1.0) # for now we are going to test the two of these to zero
+pde_weight = F(1.0)
 
 # ---------------------------------------------------------------------------
 # Step 5: Initialize Neural Network with Settings
@@ -120,9 +127,10 @@ function initialize_network(settings::PINNSettings)
   =#
 
   coeff_net = Lux.Chain(
-  Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer
+  Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
   Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
-  Lux.Dense(settings.neuron_num, N + 1)              # N+1? # Output layer with N+1 coefficients
+  Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ? 
+  Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
  )
 
   # Initialize the network's parameters with the specified seed
@@ -144,7 +152,7 @@ end
 # This can change over time. Personaly I am interested in taking the dot product 
 # between the guess and the real coefficients.
 
-function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition)
+function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition, settings::PINNSettings)
   # Run the network to get the current vector of power series coefficients
   a_vec = first(coeff_net(ode_matrix_flat, p_net, st))[:, 1]
 
@@ -170,20 +178,21 @@ function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition
     )
   end
 
+
   # Define u_approx (the 0th derivative, which is y) with coefficient b
-  u_approx(x, a_vec, N, ode_matrix_flat) = ode_matrix_flat[1] * sum(a_vec[i] * x^(i - 1) for i in 1:N+1)
+  u_approx(x) = sum(a_vec[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series+1)
 
   # Calculate the PDE loss (residual of the ODE)
-  loss_pde = sum(abs2, ode_residual(xi, ode_matrix_flat, a_vec, N) for xi in xs) / num_points
+  loss_pde = sum(abs2, ode_residual(xi, ode_matrix_flat, a_vec, settings.n_terms_for_power_series) for xi in settings.xs) / settings.num_points
 
   # Calculate the loss from the boundary conditions
-  loss_bc = abs2(ode_matrix_flat[1] * u_approx(x_left, a_vec, N, ode_matrix_flat) - F(boundary_condition))
+  loss_bc = abs2(u_approx(settings.x_left) - F(boundary_condition))
 
   # Calculate supervised loss using the plugboard coefficients
-  loss_supervised = sum(abs2, a_vec[1:num_supervised] - data) / num_supervised
+  loss_supervised = sum(abs2, a_vec[1:settings.num_supervised] - data) / settings.num_supervised
 
   # The total loss is a weighted sum of the components
-  return loss_pde * pde_weight + bc_weight * loss_bc + supervised_weight * loss_supervised
+  return loss_pde * settings.pde_weight + settings.bc_weight * loss_bc + settings.supervised_weight * loss_supervised
 end
 
 # ---------------------------------------------------------------------------
@@ -200,8 +209,8 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st)
     # println("The local loss is locally lossing...")
     # alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix 
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
-    boundary_condition = series_coeffs[1] 
-    local_loss = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition) # calculate the local loss
+    boundary_condition = series_coeffs[1]  # copy this
+    local_loss = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings) # calculate the local loss
      # println(local_loss)
     total_loss += local_loss # add up the local loss to find the global loss
   end
@@ -273,60 +282,103 @@ end
 # analytic_sol_func(x) = (pi * x * (-x + (pi^2) * (2x - 3) + 1) - sin(pi * x)) / (pi^3) # We replace with our training examples
 # This is then represented as a TaylorSeries 
 
-
-function evaluate_solution(p_trained, coeff_net, st, benchmark_dataset)
-  # TODO:loop through the different benchmark runs that we have
-  # We have to make sure that these datasets have the same number 
-  # of training runs.
-
-  # Create prediction function
-  # TODO: We have to loop through each benchmark run and create the
-  # function that is predicted by the model and the real function from the plugboard
-  
-  # Convert the alpha matrix keys from strings to matrices
-  # Because zygote is being mean
+function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, benchmark_dataset, data_directories)
   ConvertSettings = StringToMatrixSettings(benchmark_dataset)
   converted_benchmark_dataset = ConvertStringToMatrix.convert(ConvertSettings)
+
+  fact = factorial.(big.(0:settings.n_terms_for_power_series)) # I am not considering this in the series. The PINN will guess the coefficients
  
   for (alpha_matrix_key, benchmark_series_coeffs) in converted_benchmark_dataset
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
     # this is the guess that the trained model would give
 
     a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1] # extract learned coefficients
-    u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) for i in 1:N)
+    u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
     
     # this is the taylor series that is predicted by the PINN
-    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:N) 
+    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series) 
 
     # Generate plotting points
-    x_plot = x_left:F(0.01):x_right
+    x_plot = settings.x_left:F(0.01):settings.x_right
     # It makes sense that this has to be replaced because this is used for plotting the error as well
-    u_real = u_real_func.(x_plot) # instead we have to make this be plugboard coefficients k
+    u_real = u_real_func.(x_plot)
     u_predict = u_predict_func.(x_plot)
 
-    # Plot comparison
-    plot_compare = plot(x_plot, u_real, label="Analytic Solution", linestyle=:dash, linewidth=3)
-    plot!(plot_compare, x_plot, u_predict, label="PINN Power Series", linewidth=2)
-    title!(plot_compare, "ODE Solution Comparison")
-    xlabel!(plot_compare, "x")
-    ylabel!(plot_compare, "u(x)")
-    savefig(plot_compare, "data/solution_comparison.png")
+    # ============================================================================
+    # FIGURE 1: Function Analysis (u(x) comparison and error)
+    # ============================================================================
 
-    # Plot error
-    error = max.(abs.(u_real .- u_predict), F(1e-20))
-    plot_error = plot(x_plot, error,
-      title="Absolute Error of Power Series Solution",
+    # Plot 1a: Compare analytic solution vs PINN prediction
+    function_comparison = plot(x_plot, u_real, 
+      label="Analytic Solution", 
+      linestyle=:dash, 
+      linewidth=3,
+      title="ODE Solution Comparison",
+      xlabel="x",
+      ylabel="u(x)",
+      legend=:best)
+
+    plot!(function_comparison, x_plot, u_predict, 
+      label="PINN Power Series", 
+      linewidth=2)
+
+    # Plot 1b: Function error
+    function_error_data = max.(abs.(u_real .- u_predict), F(1e-20))
+    function_error_plot = plot(x_plot, function_error_data,
+      title="Absolute Error of Solution",
       label="|Analytic - Predicted|",
       yscale=:log10,
       xlabel="x",
       ylabel="Error",
       linewidth=2)
-    savefig(plot_error, "data/error.png")
+
+    # Combine into Figure 1
+    figure_one = plot(function_comparison, function_error_plot,
+      layout=(2,1), 
+      size=(800, 800))
+
+    savefig(figure_one, data_directories[1])
+
+    # ============================================================================
+    # FIGURE 2: Coefficient Analysis (comparison and error)
+    # ============================================================================
+
+    # Prepare data
+    n_length_benchmark = length(benchmark_series_coeffs)
+    indices = 1:n_length_benchmark
+
+    # Plot 2a: Compare benchmark coefficients vs learned coefficients
+    coefficient_comparison = plot(indices, benchmark_series_coeffs,
+      title="Coefficient Comparison",
+      label="Benchmark",
+      xlabel="Coefficient Index",
+      ylabel="Coefficient Value",
+      linewidth=2,
+      legend=:best)
+
+    plot!(coefficient_comparison, indices, a_learned[1:n_length_benchmark],
+        label="PINN",
+        linewidth=2)
+
+    # Plot 2b: Coefficient error
+    coefficient_error_data = max.(abs.(benchmark_series_coeffs .- a_learned[1:n_length_benchmark]), 1e-20)
+    coefficient_error_plot = plot(indices, coefficient_error_data,
+      title="Absolute Error of Coefficients",
+      label="|Benchmark - PINN|",
+      yscale=:log10,
+      xlabel="Coefficient Index",
+      ylabel="Absolute Error",
+      linewidth=2)
+
+    # Combine into Figure 2
+    figure_two = plot(coefficient_comparison, coefficient_error_plot, 
+      layout=(2,1),
+      size=(800, 800))
+
+    savefig(figure_two, data_directories[2])
 
     println("\nPlots saved to 'data' directory.")
-    println("- solution_comparison.png")
-    println("- error.png")
-    
+
     println("PINN's guess for coefficients: ", a_learned)
     println("The REAL coefficients: ", benchmark_series_coeffs)
   end
