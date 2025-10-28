@@ -20,24 +20,23 @@ Parameters:
 - fixed_weights: NamedTuple with the fixed values for the other weights
 """
 
-function binary_search_weights(training_dataset, weight_name::Symbol, 
-                               weight_range::Tuple{Float32, Float32},
-                               num_iterations::Int;
-                               fixed_weights::NamedTuple,
-                               num_supervised=5, N=5, x_left=0.0f0, x_right=1.0f0,
-                               xs,
-                               base_data_dir="data")
-    
+function search(training_dataset, weight_name::Symbol, weight_range::Tuple{Int, Int},
+  num_iterations::Int;
+  fixed_weights::NamedTuple,
+  num_supervised=5, N=5, x_left=0.0f0, x_right=1.0f0,
+  xs,
+  base_data_dir="data")
+
   left, right = weight_range
-  
+
   println("Starting binary search on $(weight_name) weight")
   println("Range: [$(left), $(right)]")
   println("Fixed weights: $(fixed_weights)")
   println("="^50)
-  
+
   for iteration in 1:num_iterations
     # Calculate midpoint
-    mid = (left + right) / 2.0f0
+    mid = (left + right) / 2
 
     println("\nIteration $(iteration)/$(num_iterations)")
     println("Testing weight value: $(mid)")

@@ -11,8 +11,8 @@ using .ProgressBar
 include("../utils/ConvertStringToMatrix.jl")
 using .ConvertStringToMatrix
 
-include("../utils/ExperimentsForWeights.jl")
-using.ExperimentsForWeights
+include("../utils/TwoDGridSearchOnWeights.jl")
+using .TwoDGridSearchOnWeights
 
 include("../scripts/PINN.jl")
 using .PINN
@@ -135,17 +135,17 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   # Define a weight for the boundary condition, surpivesed coefficients, and the pde
   supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
-  bc_weight = F(1.0) # for now we are going to test the two of these to zero
-  pde_weight = F(1.0)
+  bc_weight = F(0.0)# for now we are going to test the two of these to zero
+  pde_weight = F(0.0)
 
   xs = range(x_left, x_right, length=num_points)
 
   # BS on pde_weight with supervised and bc fixed at 1.0
-  
+  #=
   binary_search_weights(
     training_dataset,
     :pde,
-    (0.0f0, 100.0f0),
+    (0, 100),
     20,
     fixed_weights = (supervised=supervised_weight, bc=bc_weight),
     num_supervised = num_supervised,
@@ -155,14 +155,16 @@ function run_training_sequence(batch_sizes::Array{Int})
     xs = xs,
     base_data_dir = "data"
   )
+  =#
 
+  #=
   # Search on supervised_weight
   binary_search_weights(
     training_dataset,
     :supervised,
-    (0.0f0, 100.0f0),
+    (0, 100),
     20,
-    fixed_weights = (bc=1.0f0, pde=1.0f0),
+    fixed_weights = (bc=bc_weight, pde=pde_weight),
     num_supervised = num_supervised,
     N = N,
     x_left = x_left,
@@ -171,13 +173,16 @@ function run_training_sequence(batch_sizes::Array{Int})
     base_data_dir = "data"
   )
 
+  =#
+
+  #=
   # Search on bc_weight
   binary_search_weights(
     training_dataset,
     :bc,
-    (0.0f0, 100.0f0),
+    (0, 100),
     20,
-    fixed_weights = (supervised=1.0f0, pde=1.0f0),
+    fixed_weights = (supervised=supervised_weight, pde=pde_weight),
     num_supervised = num_supervised,
     N = N,
     x_left = x_left,
@@ -186,24 +191,55 @@ function run_training_sequence(batch_sizes::Array{Int})
     base_data_dir = "data"
   )
 
-  #= Uncomment this code if you want to normally run the PINN
+  =#
+
+
+  # Plugboard.solve_ode_series_closed_form(training_dataset["01"])
+  
+
+  #= 
   # loop through each training run and pass in the series coefficients 
   # and its corresponding ODE embedding
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
-    ConvertSettings = StringToMatrixSettings(inner_dict)
-    converted_dict = ConvertStringToMatrix.convert(ConvertSettings)
+    converted_dict = ConvertStringToMatrix.convert(inner_dict)
     settings = PINNSettings(5, 1234, converted_dict, 1000, 1000, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings) # this is where we call the training process
- 
-    evaluate_solution(settings, p_trained, coeff_net, st, training_dataset["01"])
+    
+    base_data_dir = "data"
+    iteration_dir = joinpath(base_data_dir, "test")
+    mkpath(iteration_dir)
+    data_directories = [
+      joinpath(iteration_dir, "function_comparison.png"),
+      joinpath(iteration_dir, "coefficient_comparison.png"),
+    ]
+
+    function_error = evaluate_solution(settings, p_trained, coeff_net, st, training_dataset["01"], data_directories)
+    println(function_error)
+
   end
   =#
 
+  result = grid_search_2d(
+    training_dataset,
+    :pde, (0.1, 100.0),  # supervised weight range
+    :bc, (0.1, 100.0),           # bc weight range
+    10,                          # 10x10 grid = 100 evaluations
+    fixed_weights=(supervised=1.0,),
+    num_supervised=5,
+    N=5,
+    x_left=0.0f0,
+    x_right=1.0f0,
+    xs=xs
+  )
+
+  println(result)
+
 end
+
 
 batch = [1]
 

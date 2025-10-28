@@ -103,9 +103,9 @@ x_left = F(0.0)  # Left boundary of the domain
 x_right = F(1.0) # Right boundary of the domain
 
 # Define a weight for the boundary condition, surpivesed coefficients, and the pde
-supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
-bc_weight = F(1.0) # for now we are going to test the two of these to zero
-pde_weight = F(1.0)
+# supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
+# bc_weight = F(1.0) # for now we are going to test the two of these to zero
+# pde_weight = F(1.0)
 
 # ---------------------------------------------------------------------------
 # Step 5: Initialize Neural Network with Settings
@@ -283,18 +283,23 @@ end
 # This is then represented as a TaylorSeries 
 
 function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, benchmark_dataset, data_directories)
-  ConvertSettings = StringToMatrixSettings(benchmark_dataset)
-  converted_benchmark_dataset = ConvertStringToMatrix.convert(ConvertSettings)
-
+  converted_benchmark_dataset = ConvertStringToMatrix.convert(benchmark_dataset)
   fact = factorial.(big.(0:settings.n_terms_for_power_series)) # I am not considering this in the series. The PINN will guess the coefficients
- 
+
+  # We will update the error. For now we are only going to do ONE test set.
+  loss = F(0.0)
+
   for (alpha_matrix_key, benchmark_series_coeffs) in converted_benchmark_dataset
+    # we need to compute the loss from the PINNs guess and the real function
+    # We will then use this for our contour maps
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
-    # this is the guess that the trained model would give
+    boundary_condition = benchmark_series_coeffs[1]
+    benchmark_loss = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings)
+    loss += benchmark_loss
 
     a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1] # extract learned coefficients
+
     u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
-    
     # this is the taylor series that is predicted by the PINN
     u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series) 
 
@@ -303,7 +308,6 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     # It makes sense that this has to be replaced because this is used for plotting the error as well
     u_real = u_real_func.(x_plot)
     u_predict = u_predict_func.(x_plot)
-
     # ============================================================================
     # FIGURE 1: Function Analysis (u(x) comparison and error)
     # ============================================================================
@@ -382,6 +386,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     println("PINN's guess for coefficients: ", a_learned)
     println("The REAL coefficients: ", benchmark_series_coeffs)
   end
+  return loss
 end
 
 # ---------------------------------------------------------------------------

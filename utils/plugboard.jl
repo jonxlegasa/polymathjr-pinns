@@ -157,5 +157,5 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
   end
 end
 
-export Settings, generate_random_ode_dataset
+export Settings, generate_random_ode_dataset, solve_ode_series_closed_form
 end
