@@ -157,5 +157,53 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
   end
 end
 
-export Settings, generate_random_ode_dataset, solve_ode_series_closed_form
+# Generate a specific benchmark
+function generate_specific_ode_dataset(s::Settings, batch_index::Int, α_matrix::Matrix{Int64})
+  ode_order = s.ode_order
+  poly_degree = s.poly_degree
+  # α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+  println("α matrix:")
+  display(α_matrix)
+  # generate exactly ode_order initial conditions
+  initial_conditions = Float64[]
+  for i in 0:(ode_order-1)
+    if i == 0
+      push!(initial_conditions, rand(1:5))  # y(0) = a_0
+      println("y(0) = ", initial_conditions[end])
+    elseif i == 1
+      push!(initial_conditions, rand(1:5))  # y'(0) = a_1
+      println("y'(0) = ", initial_conditions[end])
+    end
+  end
+  try
+    # output taylor series and its coefficients
+    taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 5)
+    println("truncated taylor series: ", taylor_series)
+    println("truncated series coefficients: ", series_coeffs)
+    # read existing data
+    existing_data = if isfile(s.data_dir)
+      JSON.parsefile(s.data_dir)
+    else
+      Dict()
+    end
+    # Determine which training run this is based on existing data
+    dataset_key = lpad(batch_index, 2, '0')
+    # Initialize dataset key if it does not exist
+    if !haskey(existing_data, dataset_key)
+      existing_data[dataset_key] = Dict()
+    end
+    # use alpha matrix as key, series coefficients as value within the dataset batch
+   #  α_matrix_key = join(["[" * join(row, ", ") * "]" for row in eachrow(α_matrix)], "; ")
+
+    existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems 
+    isdir("data") || mkpath("data") # ensure a data folder exists
+    json_string = JSON.json(existing_data)
+    write(s.data_dir, json_string)
+  catch e
+    println("failed to solve this ode: ", e)
+    return nothing
+  end
+end
+
+export Settings, generate_random_ode_dataset, generate_specific_ode_dataset, solve_ode_series_closed_form
 end

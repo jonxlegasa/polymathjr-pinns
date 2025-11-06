@@ -29,18 +29,18 @@ function evaluate_weight_configuration(training_dataset, weights::NamedTuple,
   supervised_weight = weights.supervised
   bc_weight = weights.bc
   pde_weight = weights.pde
-  
+
   # Create directory for this configuration
   config_dir = joinpath(base_data_dir, 
                        "s$(round(supervised_weight, digits=2))-" *
                        "b$(round(bc_weight, digits=2))-" *
                        "p$(round(pde_weight, digits=2))")
   mkpath(config_dir)
-  
+
   # Initialize objective value accumulator
   total_error = 0.0
   num_runs = 0
-  
+
   # Train with current weight configuration
   for (run_idx, inner_dict) in training_dataset
     ConvertSettings = StringToMatrixSettings(inner_dict)

@@ -183,8 +183,8 @@ function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition
   u_approx(x) = sum(a_vec[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series+1)
 
   # Calculate the PDE loss (residual of the ODE)
-  loss_pde = sum(abs2, ode_residual(xi, ode_matrix_flat, a_vec, settings.n_terms_for_power_series) for xi in settings.xs) / settings.num_points
-
+  loss_pde = sum(abs2, ode_residual(xi, ode_matrix_flat, a_vec, settings.n_terms_for_power_series) for xi in settings.xs) / settings.num_points 
+  
   # Calculate the loss from the boundary conditions
   loss_bc = abs2(u_approx(settings.x_left) - F(boundary_condition))
 
@@ -283,6 +283,7 @@ end
 # This is then represented as a TaylorSeries 
 
 function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, benchmark_dataset, data_directories)
+  println(benchmark_dataset)
   converted_benchmark_dataset = ConvertStringToMatrix.convert(benchmark_dataset)
   fact = factorial.(big.(0:settings.n_terms_for_power_series)) # I am not considering this in the series. The PINN will guess the coefficients
 

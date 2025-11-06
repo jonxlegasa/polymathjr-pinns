@@ -29,7 +29,7 @@ end
 Train and evaluate a single weight configuration.
 Returns an objective value (lower is better).
 """
-function evaluate_weight_configuration(training_dataset, weights::NamedTuple,
+function evaluate_weight_configuration(training_dataset, benchmark_dataset, weights::NamedTuple,
                                       num_supervised, N, x_left, x_right, xs;
                                       base_data_dir="data")
 
@@ -51,7 +51,7 @@ function evaluate_weight_configuration(training_dataset, weights::NamedTuple,
   # Train with current weight configuration
   for (run_idx, inner_dict) in training_dataset
     converted_dict = ConvertStringToMatrix.convert(inner_dict)
-    settings = PINNSettings(5, 1234, converted_dict, 500, 500,
+    settings = PINNSettings(50, 1234, converted_dict, 500, 500,
                            num_supervised, N, 10, x_left, x_right,
                            supervised_weight, bc_weight, pde_weight, xs)
 
@@ -73,7 +73,7 @@ function evaluate_weight_configuration(training_dataset, weights::NamedTuple,
     ]
 
     function_error = evaluate_solution(settings, p_trained, coeff_net, st,
-                     training_dataset["01"], data_directories)
+                     benchmark_dataset, data_directories)
     total_error += function_error
   end
 
@@ -87,7 +87,7 @@ end
 
 Perform 2D grid search over two hyperparameters.
 """
-function grid_search_2d(training_dataset, 
+function grid_search_2d(training_dataset, benchmark_dataset,
                         weight1::Symbol, weight1_range::Tuple{Float64, Float64},
                         weight2::Symbol, weight2_range::Tuple{Float64, Float64},
                         num_points::Int;
@@ -125,7 +125,7 @@ function grid_search_2d(training_dataset,
 
       # Evaluate this configuration
       objective_value = evaluate_weight_configuration(
-        training_dataset, weights, num_supervised, N, 
+        training_dataset, benchmark_dataset, weights, num_supervised, N, 
         x_left, x_right, xs; base_data_dir=base_data_dir
       )
 
@@ -173,7 +173,6 @@ function random_search_2d(training_dataset,
                           num_supervised, N, x_left, x_right,
                           xs,
                           base_data_dir="data/random_search")
-
   println("Starting 2D random search")
   println("Weight 1: $(weight1), Range: $(weight1_range)")
   println("Weight 2: $(weight2), Range: $(weight2_range)")
@@ -185,10 +184,10 @@ function random_search_2d(training_dataset,
   weight1_samples = Float64[]
   weight2_samples = Float64[]
   objective_values = Float64[]
-  
+
   best_objective = Inf
   best_weights = nothing
-  
+
   for sample in 1:num_samples
     println("\nSample $(sample) / $(num_samples)")
 
@@ -230,7 +229,7 @@ function random_search_2d(training_dataset,
   save_random_search_summary(weight1_samples, weight2_samples, objective_values,
                             best_weights, best_objective, weight1, weight2,
                             base_data_dir)
-  
+
   return (weight1_samples, weight2_samples, objective_values, best_weights, best_objective)
 end
 
@@ -244,27 +243,27 @@ Helper function to create a NamedTuple with all three weights.
 function create_weight_tuple(weight1::Symbol, w1::Float64,
                             weight2::Symbol, w2::Float64,
                             fixed_weights::NamedTuple)
-  
+
   weights_dict = Dict{Symbol, Float64}()
-  
+
   # Set the two variables being searched
   weights_dict[weight1] = w1
   weights_dict[weight2] = w2
-  
+
   # Add the fixed weight
   for (key, val) in pairs(fixed_weights)
     if key != weight1 && key != weight2
       weights_dict[key] = val
     end
   end
-  
+
   # Ensure all three weights are present
   if !haskey(weights_dict, :supervised) || 
      !haskey(weights_dict, :bc) || 
      !haskey(weights_dict, :pde)
     error("Weight configuration incomplete. Need supervised, bc, and pde weights.")
   end
-  
+
   return (supervised=weights_dict[:supervised], 
           bc=weights_dict[:bc], 
           pde=weights_dict[:pde])
@@ -285,15 +284,41 @@ function visualize_search_results(result::GridSearchResult,
   w2_values = result.weight_values[weight2]
   obj_matrix = result.objective_values
 
+
+  # Calculate appropriate number of levels based on data range
+  min_obj = minimum(obj_matrix)
+  max_obj = maximum(obj_matrix)
+  obj_range = max_obj - min_obj
+
+  num_levels = max(5, min(30, Int(round(obj_range * 10))))
+  # num_levels = 10.0 .^ range(-2, 2, length=20) 
+  # num_levels = 12
+  # num_levels = 20
+  println("Objective value range: $(min_obj) to $(max_obj)")
+  println("Using $(num_levels) contour levels")
+
   # Create contour plot
   p = contour(w1_values, w2_values, obj_matrix,
               xlabel=String(weight1),
               ylabel=String(weight2),
+              yscale=:log10,
               title="Hyperparameter Search: $(weight1) vs $(weight2)",
-              levels=15,
+              levels=num_levels,
               linewidth=2,
               color=:magma,
-              fill=true)
+              fill=false)
+
+  # Add grid points as scatter plot
+  # Create all combinations of w1 and w2 values
+  grid_w1 = repeat(w1_values, outer=length(w2_values))
+  grid_w2 = repeat(w2_values, inner=length(w1_values))
+
+  scatter!(grid_w1, grid_w2,
+           marker=:x,
+           markersize=10,
+           color=:green,
+           label="Grid points",
+           alpha=1)
 
   # Mark the best point
   best_w1 = result.best_weights[weight1]
@@ -315,6 +340,14 @@ function visualize_search_results(result::GridSearchResult,
                 title="Objective Landscape",
                 camera=(45, 30),
                 color=:magma)
+   # Add grid points to 3D plot
+  grid_obj = vec(obj_matrix')  # Flatten the objective matrix to match grid points
+  scatter3d!(grid_w1, grid_w2, grid_obj,
+             marker=:circle,
+             markersize=3,
+             color=:green,
+             label="Grid points",
+             alpha=0.6)
 
   scatter3d!([best_w1], [best_w2], [result.best_objective],
              marker=:star,
