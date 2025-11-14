@@ -30,6 +30,8 @@ import IntervalSets: Interval
 using Plots, ProgressMeter
 import Random
 using TaylorSeries
+using CSV
+using DataFrames
 
 include("../utils/ProgressBar.jl")
 using .ProgressBar
@@ -127,10 +129,10 @@ function initialize_network(settings::PINNSettings)
   =#
 
   coeff_net = Lux.Chain(
-  Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
-  Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
-  Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ? 
-  Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
+    Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ? 
+    Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
  )
 
   # Initialize the network's parameters with the specified seed
@@ -178,13 +180,12 @@ function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition
     )
   end
 
-
   # Define u_approx (the 0th derivative, which is y) with coefficient b
   u_approx(x) = sum(a_vec[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series+1)
 
   # Calculate the PDE loss (residual of the ODE)
   loss_pde = sum(abs2, ode_residual(xi, ode_matrix_flat, a_vec, settings.n_terms_for_power_series) for xi in settings.xs) / settings.num_points 
-  
+
   # Calculate the loss from the boundary conditions
   loss_bc = abs2(u_approx(settings.x_left) - F(boundary_condition))
 
@@ -192,16 +193,37 @@ function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition
   loss_supervised = sum(abs2, a_vec[1:settings.num_supervised] - data) / settings.num_supervised
 
   # The total loss is a weighted sum of the components
-  return loss_pde * settings.pde_weight + settings.bc_weight * loss_bc + settings.supervised_weight * loss_supervised
+  # We want to return the global loss but we want to return the individual loss as well
+  return loss_pde * settings.pde_weight + settings.bc_weight * loss_bc + settings.supervised_weight * loss_supervised, loss_bc, loss_pde, loss_supervised
 end
 
 # ---------------------------------------------------------------------------
 # Step 7: Global Loss Function
 # ---------------------------------------------------------------------------
 
-function global_loss(p_net, settings::PINNSettings, coeff_net, st)
+
+function create_csv_file_for_loss(csv_file, normalized_loss, normalized_loss_bc, normalized_loss_pde, normalized_loss_supervised)
+  df = CSV.read(csv_file, DataFrame)
+
+  # Append multiple rows from vectors
+  new_data = DataFrame(
+    total_loss = normalized_loss,
+    total_loss_bc = normalized_loss_bc,
+    total_loss_pde = normalized_loss_pde,
+    total_loss_supervised = normalized_loss_supervised
+  )
+
+  append!(df, new_data)
+  CSV.write(csv_file, df)
+end
+
+function global_loss(p_net, settings::PINNSettings, coeff_net, st, csv_file)
   total_loss = F(0.0)
+  total_local_loss_bc = F(0.0)
+  total_local_loss_pde = F(0.0)
+  total_local_loss_supervised = F(0.0)
   num_of_training_examples = length(settings.ode_matrices)
+
   # println(settings.ode_matrices) # print out the ode_matrices dictionary
   # println("The global loss is globally lossing...")
   for (alpha_matrix_key, series_coeffs) in settings.ode_matrices
@@ -210,12 +232,18 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st)
     # alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix 
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
     boundary_condition = series_coeffs[1]  # copy this
-    local_loss = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings) # calculate the local loss
+    local_loss, local_loss_bc, local_loss_pde, local_loss_supervised = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings) # calculate the local loss
      # println(local_loss)
     total_loss += local_loss # add up the local loss to find the global loss
+    total_local_loss_bc += local_loss_bc
+    total_local_loss_pde += local_loss_pde
+    total_local_loss_supervised += local_loss_supervised
   end
 
   normalized_loss = total_loss / num_of_training_examples
+  normalized_loss_bc = total_local_loss_bc / num_of_training_examples
+  normalized_loss_pde = total_local_loss_pde / num_of_training_examples
+  normalized_loss_supervised = total_local_loss_supervised / num_of_training_examples
 
   # println(total_loss)
   return normalized_loss
@@ -229,13 +257,24 @@ end
 We train the PINN on the training dataset and return the network
 =#
 
-function train_pinn(settings::PINNSettings)
+function train_pinn(settings::PINNSettings, csv_file)
+  df = DataFrame(
+    total_loss = Float64[],
+    total_loss_bc = Float64[],
+    total_loss_pde = Float64[],
+    total_loss_supervised = Float64[],
+  )
+
+  println("Create CSV file")
+
+  CSV.write(csv_file, df)
+
   # Initialize network
   coeff_net, p_init_ca, st = initialize_network(settings)
-
+  # global_loss_tuple = Tuple{Int64, Float64, Float64, Float64, Float64}[] # this will store the global loss per iteration milestone
   # Create wrapper function for optimization
   function loss_wrapper(p_net, _)
-    return global_loss(p_net, settings, coeff_net, st) # one location where the error is coming from
+    return global_loss(p_net, settings, coeff_net, st, csv_file)
   end
 
   # ---------------- Stage 1: ADAM ----------------
@@ -245,11 +284,9 @@ function train_pinn(settings::PINNSettings)
 
   # Define the optimization problem
   adtype = Optimization.AutoZygote()
-  optfun = OptimizationFunction(loss_wrapper, adtype) # this is definitely working because the loss is lossing...
+  optfun = OptimizationFunction(loss_wrapper, adtype)
   prob = OptimizationProblem(optfun, p_init_ca)
 
-  # error is coming from here too?
-  # Solve with Adam optimizer
   res = solve(prob,
     OptimizationOptimisers.Adam(F(1e-3));
     callback=callback_one, # this is for the progress bar 
@@ -271,7 +308,7 @@ function train_pinn(settings::PINNSettings)
 
   println("\nTraining complete.")
 
-  return p_trained, coeff_net, st
+  return p_trained, coeff_net, st, global_loss_tuple_one, global_loss_tuple_two
 end
 
 # ---------------------------------------------------------------------------
@@ -379,8 +416,115 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     figure_two = plot(coefficient_comparison, coefficient_error_plot, 
       layout=(2,1),
       size=(800, 800))
-
     savefig(figure_two, data_directories[2])
+
+
+    # Read the CSV file
+    df = CSV.read(data_directories[5], DataFrame)
+
+    # Determine the split point
+    total_rows = nrow(df)
+
+    # Split the DataFrame
+    df_adam = df[1:settings.maxiters_adam, :]
+    df_lbfgs = df[(settings.maxiters_adam + 1):total_rows, :]
+
+    # Adam plots (using row indices 1:1000)
+    adam_global_loss_plot = plot(
+      1:nrow(df_adam),
+      df_adam.total_loss,
+      title = "Global Loss per Adam Iteration",
+      xlabel = "Adam Iteration Step",
+      ylabel = "Global Loss",
+      yscale = :log10
+    )
+
+    adam_bc_loss_plot = plot(
+      1:nrow(df_adam),
+      df_adam.total_loss_bc,
+      title = "Boundary Condition Loss per Adam Iteration",
+      xlabel = "Adam Iteration Step",
+      ylabel = "BC Loss",
+      yscale = :log10
+    )
+
+    adam_pde_loss_plot = plot(
+      1:nrow(df_adam),
+      df_adam.total_loss_pde,
+      title = "PDE Loss per Adam Iteration",
+      xlabel = "Adam Iteration Step",
+      ylabel = "PDE Loss",
+      yscale = :log10
+    )
+
+    adam_supervised_loss_plot = plot(
+      1:nrow(df_adam),
+      df_adam.total_loss_supervised,
+      title = "Supervised Loss per Adam Iteration",
+      xlabel = "Adam Iteration Step",
+      ylabel = "Supervised Loss",
+      yscale = :log10
+    )
+
+    # LBFGS plots (using row indices 1:1000, not 1001:2000)
+    lbfgs_global_loss_plot = plot(
+      1:nrow(df_lbfgs),
+      df_lbfgs.total_loss,
+      title = "Global Loss per LBFGS Iteration",
+      xlabel = "LBFGS Iteration Step",
+      ylabel = "Global Loss",
+      yscale = :log10
+    )
+
+    lbfgs_bc_loss_plot = plot(
+      1:nrow(df_lbfgs),
+      df_lbfgs.total_loss_bc,
+      title = "Boundary Condition Loss per LBFGS Iteration",
+      xlabel = "LBFGS Iteration Step",
+      ylabel = "BC Loss",
+      yscale = :log10
+    )
+
+    lbfgs_pde_loss_plot = plot(
+      1:nrow(df_lbfgs),
+      df_lbfgs.total_loss_pde,
+      title = "PDE Loss per LBFGS Iteration",
+      xlabel = "LBFGS Iteration Step",
+      ylabel = "PDE Loss",
+      yscale = :log10
+    )
+
+    lbfgs_supervised_loss_plot = plot(
+      1:nrow(df_lbfgs),
+      df_lbfgs.total_loss_supervised,
+      title = "Supervised Loss per LBFGS Iteration",
+      xlabel = "LBFGS Iteration Step",
+      ylabel = "Supervised Loss",
+      yscale = :log10
+    )
+
+    # Combine plots
+    main_adam_iteration_plot = plot(
+      adam_global_loss_plot,
+      adam_bc_loss_plot,
+      adam_pde_loss_plot,
+      adam_supervised_loss_plot,
+      layout = (4, 1),
+      size = (1000, 1000)
+    )
+
+    main_lbfgs_iteration_plot = plot(
+      lbfgs_global_loss_plot,
+      lbfgs_bc_loss_plot,
+      lbfgs_pde_loss_plot,
+      lbfgs_supervised_loss_plot,
+      layout = (4, 1),
+      size = (1000, 1000)
+    )
+
+    # Save plots
+    savefig(main_adam_iteration_plot, data_directories[3])
+    savefig(main_lbfgs_iteration_plot, data_directories[4])
 
     println("\nPlots saved to 'data' directory.")
 

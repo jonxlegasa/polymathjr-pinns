@@ -214,23 +214,24 @@ function run_training_sequence(batch_sizes::Array{Int})
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
-    converted_dict = ConvertStringToMatrix.convert(inner_dict)
-    settings = PINNSettings(50, 1234, converted_dict, 5000, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
-
-    # Train the network
-    p_trained, coeff_net, st = train_pinn(settings) # this is where we call the training process
-
     base_data_dir = "data"
     iteration_dir = joinpath(base_data_dir, "test")
     mkpath(iteration_dir)
+
     data_directories = [
       joinpath(iteration_dir, "function_comparison.png"),
       joinpath(iteration_dir, "coefficient_comparison.png"),
+      joinpath(iteration_dir, "adam_iteration_and_loss_comparison.png"),
+      joinpath(iteration_dir, "lbfgs_iteration_and_loss_comparison.png"),
+      joinpath(iteration_dir, "iteration_output.csv"),
     ]
+    converted_dict = ConvertStringToMatrix.convert(inner_dict)
+    settings = PINNSettings(50, 1234, converted_dict, 500, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
-    function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset, data_directories)
+    # Train the network
+    p_trained, coeff_net, st = train_pinn(settings, data_directories[5]) # this is where we call the training process
+    function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
     println(function_error)
-
   end
 
   #=

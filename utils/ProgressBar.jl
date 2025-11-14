@@ -9,6 +9,7 @@ struct ProgressBarSettings
 end
 
 function Bar(s::ProgressBarSettings)
+  # global_loss_tuple = Tuple{Int64, Float64, Float64, Float64, Float64}[] # this will store the global loss per iteration milestone
   p_bar = Progress(s.maxiters, desc=s.message) # The progress bar.
   # The callback function is called after each optimization step.
   # We use it to update our progress bar.

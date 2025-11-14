@@ -373,7 +373,7 @@ function visualize_random_search(w1_samples, w2_samples, objectives,
                                 weight1::Symbol, weight2::Symbol,
                                 w1_range, w2_range,
                                 base_data_dir::String)
-  
+
   # Create scatter plot with color indicating objective value
   p = scatter(w1_samples, w2_samples,
               marker_z=objectives,
