@@ -91,7 +91,7 @@ function init_batches(batch_sizes::Array{Int})
   for (batch_index, k) in enumerate(batch_sizes)
     # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
-    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir)
+    # training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir)
 
     println("\n" * "="^50)
     println("Generating datasets for training and benchmarks $run_number_formatted")
@@ -101,7 +101,7 @@ function init_batches(batch_sizes::Array{Int})
     # Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # create training data
     # create_training_run_dirs(batch_index, k) # Create the training dirs
 
-    training_dataset = JSON.parsefile(training_data_dir)
+    # training_dataset = JSON.parsefile(training_data_dir)
 
     # add the ode matrices together
     #= 
@@ -229,11 +229,11 @@ function run_training_sequence(batch_sizes::Array{Int})
       joinpath(iteration_dir, "iteration_output.csv"),
     ]
     converted_dict = convert_plugboard_keys(inner_dict)
-    settings = PINNSettings(5, 1234, converted_dict, 500, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(5, 1234, converted_dict, 5000, 2, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
-    p_trained, coeff_net, st = train_pinn(settings, data_directories[5]) # this is where we call the training process
-    function_error = evaluate_solution(settings, p_trained, coeff_net, st, training_dataset["01"], data_directories)
+    p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
+    function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
     println(function_error)
   end
 

@@ -56,7 +56,7 @@ F = Float32
 struct PINNSettings
   neuron_num::Int
   seed::Int
-  ode_matrices::Dict{Any, Any} # from the specific training run that is specified by the run number
+  ode_matrices::Dict{Any,Any} # from the specific training run that is specified by the run number
   maxiters_adam::Int
   maxiters_lbfgs::Int
   n_terms_for_power_series::Int # The degree of the highest power term in the series.
@@ -127,7 +127,7 @@ function initialize_network(settings::PINNSettings)
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ? 
     Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
- )
+  )
 
   # Initialize the network's parameters with the specified seed
   rng = Random.default_rng()
@@ -208,7 +208,7 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st, csv_file)
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
     boundary_condition = series_coeffs[1]  # copy this
     local_loss, local_loss_bc, local_loss_pde, local_loss_supervised = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings, csv_file) # calculate the local loss
-     # println(local_loss)
+    # println(local_loss)
     total_loss += local_loss # add up the local loss to find the global loss
     total_local_loss_bc += local_loss_bc
     total_local_loss_pde += local_loss_pde
@@ -221,7 +221,7 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st, csv_file)
   normalized_loss_supervised = total_local_loss_supervised / num_of_training_examples
 
   Zygote.ignore() do
-    create_csv_file_for_loss(csv_file,
+    buffer_loss_values(  # ← Changed from create_csv_file_for_loss
       total_loss=normalized_loss,
       total_loss_bc=normalized_loss_bc,
       total_loss_pde=normalized_loss_pde,
@@ -244,6 +244,8 @@ We train the PINN on the training dataset and return the network
 function train_pinn(settings::PINNSettings, csv_file)
   # Initialize network
   coeff_net, p_init_ca, st = initialize_network(settings)
+
+  initialize_loss_buffer()
   # global_loss_tuple = Tuple{Int64, Float64, Float64, Float64, Float64}[] # this will store the global loss per iteration milestone
   # Create wrapper function for optimization
 
@@ -282,6 +284,8 @@ function train_pinn(settings::PINNSettings, csv_file)
 
   println("\nTraining complete.")
 
+  write_buffer_to_csv(csv_file)
+
   return p_trained, coeff_net, st
 end
 
@@ -313,7 +317,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
 
     u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
     # this is the taylor series that is predicted by the PINN
-    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series) 
+    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
 
     # Generate plotting points
     x_plot = settings.x_left:F(0.01):settings.x_right
@@ -325,17 +329,17 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     # ============================================================================
 
     # Plot 1a: Compare analytic solution vs PINN prediction
-    function_comparison = plot(x_plot, u_real, 
-      label="Analytic Solution", 
-      linestyle=:dash, 
+    function_comparison = plot(x_plot, u_real,
+      label="Analytic Solution",
+      linestyle=:dash,
       linewidth=3,
       title="ODE Solution Comparison",
       xlabel="x",
       ylabel="u(x)",
       legend=:best)
 
-    plot!(function_comparison, x_plot, u_predict, 
-      label="PINN Power Series", 
+    plot!(function_comparison, x_plot, u_predict,
+      label="PINN Power Series",
       linewidth=2)
 
     # Plot 1b: Function error
@@ -350,7 +354,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
 
     # Combine into Figure 1
     figure_one = plot(function_comparison, function_error_plot,
-      layout=(2,1), 
+      layout=(2, 1),
       size=(800, 800))
 
     savefig(figure_one, data_directories[1])
@@ -373,8 +377,8 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       legend=:best)
 
     plot!(coefficient_comparison, indices, a_learned[1:n_length_benchmark],
-        label="PINN",
-        linewidth=2)
+      label="PINN",
+      linewidth=2)
 
     # Plot 2b: Coefficient error
     coefficient_error_data = max.(abs.(benchmark_series_coeffs .- a_learned[1:n_length_benchmark]), 1e-20)
@@ -387,18 +391,18 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       linewidth=2)
 
     # Combine into Figure 2
-    figure_two = plot(coefficient_comparison, coefficient_error_plot, 
-      layout=(2,1),
+    figure_two = plot(coefficient_comparison, coefficient_error_plot,
+      layout=(2, 1),
       size=(800, 800))
     savefig(figure_two, data_directories[2])
 
 
     # Read the CSV file
-    df = CSV.read(data_directories[5], DataFrame)
+    df = CSV.read(data_directories[6], DataFrame)
 
     # Helper function to extract values for a specific loss type
     function get_loss_values(df, loss_type_name)
-      row = df[df.loss_type .== loss_type_name, :]
+      row = df[df.loss_type.==loss_type_name, :]
       if nrow(row) == 0
         return Float32[]
       end
@@ -410,7 +414,6 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     total_loss_bc = get_loss_values(df, "total_loss_bc")
     total_loss_pde = get_loss_values(df, "total_loss_pde")
     total_loss_supervised = get_loss_values(df, "total_loss_supervised")
-  
 
     #= THIS CODE IS COMMENTED OUT BECAUSE THE WAY WE HAVE IT IS THE CSV FILE IS UPDATED AT EACH CALL OF THE GLOBAL LOSS FUNCTION
     # Split into Adam and LBFGS phases
@@ -429,141 +432,37 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     total_loss_supervised_lbfgs = total_loss_supervised[(split_point + 1):end]
     =#
 
-    #=
-
-    # Adam plots (using row indices 1:1000)
-    adam_global_loss_plot = plot(
-      1:length(total_loss_adam),
-      total_loss_adam,
-      title = "Global Loss per Adam Iteration",
-      xlabel = "Adam Iteration Step",
-      ylabel = "Global Loss",
-      yscale = :log10
-    )
-
-    adam_bc_loss_plot = plot(
-      1:length(total_loss_bc_adam),
-      total_loss_bc_adam,
-      title = "Boundary Condition Loss per Adam Iteration",
-      xlabel = "Adam Iteration Step",
-      ylabel = "BC Loss",
-      yscale = :log10
-    )
-
-    adam_pde_loss_plot = plot(
-      1:length(total_loss_pde_adam),
-      total_loss_pde_adam,
-      title = "PDE Loss per Adam Iteration",
-      xlabel = "Adam Iteration Step",
-      ylabel = "PDE Loss",
-      yscale = :log10
-    )
-
-    adam_supervised_loss_plot = plot(
-      1:length(total_loss_supervised_adam),
-      total_loss_supervised_adam,
-      title = "Supervised Loss per Adam Iteration",
-      xlabel = "Adam Iteration Step",
-      ylabel = "Supervised Loss",
-      yscale = :log10
-    )
-
-    # LBFGS plots (using row indices 1:1000, not 1001:2000)
-    lbfgs_global_loss_plot = plot(
-      1:length(total_loss_supervised_lbfgs),
-      total_loss_supervised_lbfgs,
-      title = "Global Loss per LBFGS Iteration",
-      xlabel = "LBFGS Iteration Step",
-      ylabel = "Global Loss",
-      yscale = :log10
-    )
-
-    lbfgs_bc_loss_plot = plot(
-      1:length(total_loss_bc_lbfgs),
-      total_loss_bc_lbfgs,
-      title = "Boundary Condition Loss per LBFGS Iteration",
-      xlabel = "LBFGS Iteration Step",
-      ylabel = "BC Loss",
-      yscale = :log10
-    )
-
-    lbfgs_pde_loss_plot = plot(
-      1:length(total_loss_pde_lbfgs),
-      total_loss_pde_lbfgs,
-      title = "PDE Loss per LBFGS Iteration",
-      xlabel = "LBFGS Iteration Step",
-      ylabel = "PDE Loss",
-      yscale = :log10
-    )
-
-    lbfgs_supervised_loss_plot = plot(
-      1:length(total_loss_supervised_lbfgs),
-      total_loss_supervised_lbfgs,
-      title = "Supervised Loss per LBFGS Iteration",
-      xlabel = "LBFGS Iteration Step",
-      ylabel = "Supervised Loss",
-      yscale = :log10
-    )
-
-    # Combine plots
-    main_adam_iteration_plot = plot(
-      adam_global_loss_plot,
-      adam_bc_loss_plot,
-      adam_pde_loss_plot,
-      adam_supervised_loss_plot,
-      layout = (4, 1),
-      size = (1000, 1000)
-    )
-
-    main_lbfgs_iteration_plot = plot(
-      lbfgs_global_loss_plot,
-      lbfgs_bc_loss_plot,
-      lbfgs_pde_loss_plot,
-      lbfgs_supervised_loss_plot,
-      layout = (4, 1),
-      size = (1000, 1000)
-    )
-
-    # Save plots
-    savefig(main_adam_iteration_plot, data_directories[3])
-    savefig(main_lbfgs_iteration_plot, data_directories[4])
-    =#
-
     # Adam plots (using row indices 1:1000)
     total_loss_plot = plot(
       1:length(total_loss),
       total_loss,
-      title = "Global Loss per Global Loss Call",
-      xlabel = "Loss Call",
-      ylabel = "Global Loss",
-      yscale = :log10
+      title="Global Loss per Global Loss Call",
+      xlabel="Loss Call",
+      ylabel="Global Loss",
     )
 
     total_bc_loss_plot = plot(
       1:length(total_loss_bc),
       total_loss_bc,
-      title = "Global Boundary Condition Loss per Global Loss Call",
-      xlabel = "Loss Call",
-      ylabel = "BC Loss",
-      yscale = :log10
+      title="Global Boundary Condition Loss per Global Loss Call",
+      xlabel="Loss Call",
+      ylabel="BC Loss",
     )
 
     total_pde_loss_plot = plot(
       1:length(total_loss_pde),
       total_loss_pde,
-      title = "Global PDE Loss per Global Loss Call",
-      xlabel = "Loss Call",
-      ylabel = "PDE Loss",
-      yscale = :log10
+      title="Global PDE Loss per Global Loss Call",
+      xlabel="Loss Call",
+      ylabel="PDE Loss",
     )
 
     total_supervised_loss_plot = plot(
       1:length(total_loss_supervised),
       total_loss_supervised,
-      title = "Global Supervised Loss per Global Loss Call",
-      xlabel = "Loss Call",
-      ylabel = "Supervised Loss",
-      yscale = :log10
+      title="Global Supervised Loss per Global Loss Call",
+      xlabel="Loss Call",
+      ylabel="Supervised Loss",
     )
 
     iteration_plot = plot(
@@ -571,13 +470,13 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       total_bc_loss_plot,
       total_pde_loss_plot,
       total_supervised_loss_plot,
-      layout = (4, 1),
-      size = (1000, 1000)
+      layout=(4, 1),
+      size=(1000, 1000)
     )
 
     # Save plots
     savefig(iteration_plot, data_directories[5])
- 
+
     println("\nPlots saved to 'data' directory.")
 
     println("PINN's guess for coefficients: ", a_learned)
