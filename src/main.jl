@@ -87,22 +87,20 @@ function init_batches(batch_sizes::Array{Int})
   """
 
   # We only generate one random benchmark dataset
-  # benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
-  # Plugboard.generate_random_ode_dataset(benchmark_dataset_setting, 1)
+  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
 
   # generate training datasets and benchmarks 
   for (batch_index, k) in enumerate(batch_sizes)
+    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir)
     # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
-    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir)
 
     println("\n" * "="^50)
     println("Generating datasets for training and benchmarks $run_number_formatted")
     println("="^50)
     println("Number of examples: ", k)
 
-    #=
-
+    # panera mac & cheese is so good
     Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # create training data
     # create_training_run_dirs(batch_index, k) # Create the training dirs
 
@@ -118,9 +116,7 @@ function init_batches(batch_sizes::Array{Int})
     linear_combination_of_matrices = reduce(+, matrices_to_be_added)
     println("Linear combos: ", linear_combination_of_matrices)
 
-    benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
     Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, linear_combination_of_matrices)
-    =#
   end
 end
 
@@ -162,10 +158,10 @@ function run_training_sequence(batch_sizes::Array{Int})
   )
   =#
 
-  N = 5 # The degree of the highest power term in the series.
+  N = 21 # The degree of the highest power term in the series.
 
   # Pre-calculate factorials (0!, 1!, ..., N!) for use in the series.
-  num_supervised = 5 # The number of coefficients we will supervise during training.
+  num_supervised = 21 # The number of coefficients we will supervise during training.
   # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
   num_points = 10
 
@@ -184,10 +180,9 @@ function run_training_sequence(batch_sizes::Array{Int})
   scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
   # this increase the neuron count in an iterative process
-  scaling_neurons(scaling_neurons_settings, neurons_counts)
+  # scaling_neurons(scaling_neurons_settings, neurons_counts)
 
-  #= This code is for the classic training scheme for no change in neuron count or whatever
-
+  # This code is for the classic training scheme for no change in neuron count or whatever
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
@@ -204,7 +199,7 @@ function run_training_sequence(batch_sizes::Array{Int})
       joinpath(iteration_dir, "iteration_output.csv"),
     ]
     converted_dict = convert_plugboard_keys(inner_dict)
-    settings = PINNSettings(5, 1234, converted_dict, 1, 1, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(21, 1234, converted_dict, 1, 1, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
@@ -213,6 +208,7 @@ function run_training_sequence(batch_sizes::Array{Int})
   end
 
   #=
+
   result = grid_search_2d(
     training_dataset,
     training_dataset,
@@ -229,7 +225,6 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   =#
 
-  =#
 
   println("Good luck ;)")
   # println(result)

@@ -18,23 +18,25 @@ struct LossFunctionSettings
   data::Vector{Float32}
 end
 
+fact = factorial.(big.(0:21)) # I am not considering this in the series. The PINN will guess the coefficients
+
 function ode_residual(settings::LossFunctionSettings, x)
   return sum(
-    settings.ode_matrix_flat[order + 1] * (
-      order == 0 ? 
-      sum(settings.a_vec[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series+1) :
+    settings.ode_matrix_flat[order+1] * (
+      order == 0 ?
+      sum(settings.a_vec[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series+1) :
       sum(
-          prod((i - 1 - j) for j in 0:(order - 1)) * settings.a_vec[i] * x^(i - 1 - order)
-          for i in (order + 1):(settings.n_terms_for_power_series + 1)
+        settings.a_vec[i] * x^(i - 1 - order) / fact[i-order]
+        for i in (order+1):(settings.n_terms_for_power_series+1)
       )
     )
-    for order in 0:(length(settings.ode_matrix_flat) - 1)
+    for order in 0:(length(settings.ode_matrix_flat)-1)
   )
 end
 
 # Updated functions using the settings struct
 function generate_u_approx(settings::LossFunctionSettings)
-  u_approx(x) = sum(settings.a_vec[i] * x^(i - 1) for i in 1:(settings.n_terms_for_power_series + 1))
+  u_approx(x) = sum(settings.a_vec[i] * x^(i - 1) for i in 1:(settings.n_terms_for_power_series+1))
   return u_approx
 end
 

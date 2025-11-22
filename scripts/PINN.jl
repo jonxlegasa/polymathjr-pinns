@@ -83,7 +83,7 @@ end
 Dx = Differential(x)
 
 # Define the ordinary differential equation: u'(x) + u(x) = 0
-equation = Dx(u(x)) + u(x) ~ 0
+# equation = Dx(u(x)) + u(x) ~ 0
 
 # Define the domain over which the ODE is valid.
 # domains = [x ∈ Interval(x_left, x_right)]
@@ -93,11 +93,11 @@ equation = Dx(u(x)) + u(x) ~ 0
 # ---------------------------------------------------------------------------
 
 # We will approximate the solution u(x) with a truncated power series of degree N.
-N = 5 # The degree of the highest power term in the series.
+N = 21 # The degree of the highest power term in the series.
 
 # Pre-calculate factorials (0!, 1!, ..., N!) for use in the series.
 
-num_supervised = 5 # The number of coefficients we will supervise during training.
+num_supervised = 21 # The number of coefficients we will supervise during training.
 
 # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
 num_points = 10
@@ -147,7 +147,6 @@ end
 function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition, settings::PINNSettings, data_dir)
   # Run the network to get the current vector of power series coefficients
   a_vec = first(coeff_net(ode_matrix_flat, p_net, st))[:, 1]
-
   # Define the approximate solution and its derivatives using the coefficients
   # u_approx(x) = sum(a_vec[i] * x^(i - 1) for i in 1:N+1)
   # Du_approx(x) = sum(a_vec[i] * x^(i - 2) for i in 2:N+1) # First derivative
@@ -315,9 +314,10 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
 
     a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1] # extract learned coefficients
 
-    u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
+    u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series)
     # this is the taylor series that is predicted by the PINN
-    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) for i in 1:settings.n_terms_for_power_series)
+
+    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series)
 
     # Generate plotting points
     x_plot = settings.x_left:F(0.01):settings.x_right

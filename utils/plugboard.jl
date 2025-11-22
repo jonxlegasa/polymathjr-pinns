@@ -50,6 +50,7 @@ function factorial_product_numeric(n_val, k, i)
 end
 
 # New closed-form implementation
+# this just 
 function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
   rows, cols = size(α_matrix)
   m = rows - 1  # ODE order
@@ -82,7 +83,8 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
           # Check if we have this coefficient available
           if coeff_index >= 0 && coeff_index < length(series_coeffs)
             factorial_term = factorial_product_numeric(n - j, k, 0)
-            term_value = c_kj * factorial_term * series_coeffs[coeff_index+1]
+            term_value = c_kj * factorial_term * series_coeffs[coeff_index+1] # is this what they mean by SHUT OFF THE FACTORIAL !!!!
+            # term_value = c_kj * series_coeffs[coeff_index+1] # this is when we want factorial_tern off.
             sum_term += term_value
           end
         end
@@ -91,7 +93,8 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
 
     # Apply the closed form formula: a_{n+m} = -(1/(c_{m,0} * (n+m)!)) * sum
     factorial_nm = factorial(big(n + m))  # Use big integer for large factorials
-    denominator = c_m_0 * factorial_nm
+    # denominator = c_m_0 * factorial_nm # no this is where it is
+    denominator = c_m_0
 
     new_coeff = -sum_term / denominator
     push!(series_coeffs, new_coeff)
@@ -100,6 +103,7 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
   return Taylor1(series_coeffs), series_coeffs
 end
 
+# just generates the json file that you see in ./data
 function generate_random_ode_dataset(s::Settings, batch_index::Int)
   ode_order = s.ode_order
   poly_degree = s.poly_degree
@@ -126,7 +130,8 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
     end
     try
       # output taylor series and its coefficients
-      taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 5)
+      # this actually computes the taylor series
+      taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 21)
       println("truncated taylor series: ", taylor_series)
       println("truncated series coefficients: ", series_coeffs)
       # read existing data
@@ -193,7 +198,7 @@ function generate_specific_ode_dataset(s::Settings, batch_index::Int, α_matrix:
       existing_data[dataset_key] = Dict()
     end
     # use alpha matrix as key, series coefficients as value within the dataset batch
-   #  α_matrix_key = join(["[" * join(row, ", ") * "]" for row in eachrow(α_matrix)], "; ")
+    #  α_matrix_key = join(["[" * join(row, ", ") * "]" for row in eachrow(α_matrix)], "; ")
 
     existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems 
     isdir("data") || mkpath("data") # ensure a data folder exists
