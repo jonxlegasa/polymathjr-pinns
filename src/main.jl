@@ -87,11 +87,11 @@ function init_batches(batch_sizes::Array{Int})
   """
 
   # We only generate one random benchmark dataset
-  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir)
+  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir, 21)
 
   # generate training datasets and benchmarks 
   for (batch_index, k) in enumerate(batch_sizes)
-    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir)
+    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir, 21)
     # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
 
@@ -100,7 +100,9 @@ function init_batches(batch_sizes::Array{Int})
     println("="^50)
     println("Number of examples: ", k)
 
-    # panera mac & cheese is so good
+    #  linear combination of coefficients of the ODEs
+    #=
+
     Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # create training data
     # create_training_run_dirs(batch_index, k) # Create the training dirs
 
@@ -117,6 +119,29 @@ function init_batches(batch_sizes::Array{Int})
     println("Linear combos: ", linear_combination_of_matrices)
 
     Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, linear_combination_of_matrices)
+    =#
+
+
+    # code for scalar multiples of the coefficients of the ODE
+    #=
+
+    # create_training_run_dirs(batch_index, k) # Create the training dirs
+
+    training_dataset = JSON.parsefile(training_data_dir)
+
+    # add the ode matrices together
+    matrices_to_be_added = Matrix{Int}[
+      alpha_matrix_key
+      for (run_idx, inner_dict) in training_dataset
+      for (alpha_matrix_key, series_coeffs) in convert_plugboard_keys(inner_dict)
+    ]
+
+    linear_combination_of_matrices = reduce(+, matrices_to_be_added)
+    println("Linear combos: ", linear_combination_of_matrices)
+
+    Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, linear_combination_of_matrices)
+    =#
+
   end
 end
 
@@ -170,14 +195,14 @@ function run_training_sequence(batch_sizes::Array{Int})
   x_right = F(1.0) # Right boundary of the domain
 
   # Define a weight for the boundary condition, surpivesed coefficients, and the pde
-  supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
+  supervised_weight = F(0.7)  # Weight for the supervised loss term in the total loss function.
   bc_weight = F(1.0)# for now we are going to test the two of these to zero
-  pde_weight = F(1.0)
+  pde_weight = F(0.4)
 
   xs = range(x_left, x_right, length=num_points)
 
-  neurons_counts = Dict("five_neurons" => 5, "ten_neurons" => 10, "twenty_neurons" => 20)
-  scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  # neurons_counts = Dict("twenty_neurons" => 20, "forty_neurons" => 40, "eighty_neurons" => 80)
+  # scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
   # this increase the neuron count in an iterative process
   # scaling_neurons(scaling_neurons_settings, neurons_counts)
@@ -199,7 +224,7 @@ function run_training_sequence(batch_sizes::Array{Int})
       joinpath(iteration_dir, "iteration_output.csv"),
     ]
     converted_dict = convert_plugboard_keys(inner_dict)
-    settings = PINNSettings(21, 1234, converted_dict, 1, 1, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(21, 1234, converted_dict, 5000, 5000, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
@@ -208,29 +233,27 @@ function run_training_sequence(batch_sizes::Array{Int})
   end
 
   #=
+    result = grid_search_2d(
+      training_dataset,
+      benchmark_dataset,
+      :pde, (0.1, 1.0),  # supervised weight range
+      :supervised, (0.1, 1.0),           # bc weight range
+      10,                          # 10x10 grid = 100 evaluations
+      fixed_weights=(bc=1.0,),
+      num_supervised=21,
+      N=21,
+      x_left=0.0f0,
+      x_right=1.0f0,
+      xs=xs
+    )
 
-  result = grid_search_2d(
-    training_dataset,
-    training_dataset,
-    :bc, (0.1, 1.0),  # supervised weight range
-    :supervised, (0.1, 1.0),           # bc weight range
-    100,                          # 10x10 grid = 100 evaluations
-    fixed_weights=(pde=1.0,),
-    num_supervised=5,
-    N=5,
-    x_left=0.0f0,
-    x_right=1.0f0,
-    xs=xs
-  )
-
-  =#
-
+    =#
 
   println("Good luck ;)")
   # println(result)
 end
 
 
-batch = [2]
+batch = [1]
 
 run_training_sequence(batch)

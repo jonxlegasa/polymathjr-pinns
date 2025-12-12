@@ -10,6 +10,7 @@ struct Settings
   poly_degree::Int
   dataset_size::Int
   data_dir::String
+  num_of_terms::Int
 end
 
 function get_user_inputs()
@@ -100,7 +101,7 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
     push!(series_coeffs, new_coeff)
   end
 
-  return Taylor1(series_coeffs), series_coeffs
+  return series_coeffs
 end
 
 # just generates the json file that you see in ./data
@@ -131,8 +132,7 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
     try
       # output taylor series and its coefficients
       # this actually computes the taylor series
-      taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 21)
-      println("truncated taylor series: ", taylor_series)
+      series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, s.num_of_terms)
       println("truncated series coefficients: ", series_coeffs)
       # read existing data
       existing_data = if isfile(s.data_dir)
@@ -182,7 +182,7 @@ function generate_specific_ode_dataset(s::Settings, batch_index::Int, α_matrix:
   end
   try
     # output taylor series and its coefficients
-    taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 5)
+    taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, s.num_of_terms) # haha this was the issue 
     println("truncated taylor series: ", taylor_series)
     println("truncated series coefficients: ", series_coeffs)
     # read existing data

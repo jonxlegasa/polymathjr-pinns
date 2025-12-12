@@ -147,6 +147,7 @@ end
 function loss_fn(p_net, data, coeff_net, st, ode_matrix_flat, boundary_condition, settings::PINNSettings, data_dir)
   # Run the network to get the current vector of power series coefficients
   a_vec = first(coeff_net(ode_matrix_flat, p_net, st))[:, 1]
+
   # Define the approximate solution and its derivatives using the coefficients
   # u_approx(x) = sum(a_vec[i] * x^(i - 1) for i in 1:N+1)
   # Du_approx(x) = sum(a_vec[i] * x^(i - 2) for i in 2:N+1) # First derivative
@@ -376,8 +377,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       legend=:best)
 
     plot!(coefficient_comparison, indices, a_learned[1:n_length_benchmark],
-      label="PINN",
-      linewidth=2)
+      label="PINN")
 
     # Plot 2b: Coefficient error
     coefficient_error_data = max.(abs.(benchmark_series_coeffs .- a_learned[1:n_length_benchmark]), 1e-20)

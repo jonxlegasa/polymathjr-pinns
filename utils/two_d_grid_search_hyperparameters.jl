@@ -31,7 +31,7 @@ Returns an objective value (lower is better).
 """
 function evaluate_weight_configuration(training_dataset, benchmark_dataset, weights::NamedTuple,
   num_supervised, N, x_left, x_right, xs;
-  base_data_dir="data")
+  base_data_dir="data/grid_search")
 
   # Extract weights
   supervised_weight = weights.supervised
@@ -50,23 +50,20 @@ function evaluate_weight_configuration(training_dataset, benchmark_dataset, weig
 
   # Train with current weight configuration
   for (run_idx, inner_dict) in training_dataset
-    base_data_dir = "data"
-    iteration_dir = joinpath(base_data_dir, "test")
-    mkpath(iteration_dir)
 
     data_directories = [
-      joinpath(iteration_dir, "function_comparison.png"),
-      joinpath(iteration_dir, "coefficient_comparison.png"),
-      joinpath(iteration_dir, "adam_iteration_and_loss_comparison.png"),
-      joinpath(iteration_dir, "lbfgs_iteration_and_loss_comparison.png"),
-      joinpath(iteration_dir, "iteration_plot.png"),
-      joinpath(iteration_dir, "iteration_output.csv"),
+      joinpath(config_dir, "function_comparison.png"),
+      joinpath(config_dir, "coefficient_comparison.png"),
+      joinpath(config_dir, "adam_iteration_and_loss_comparison.png"),
+      joinpath(config_dir, "lbfgs_iteration_and_loss_comparison.png"),
+      joinpath(config_dir, "iteration_plot.png"),
+      joinpath(config_dir, "iteration_output.csv"),
     ]
 
     println("  Training with weights: supervised=$(supervised_weight), bc=$(bc_weight), pde=$(pde_weight)")
 
     converted_dict = convert_plugboard_keys(inner_dict)
-    settings = PINNSettings(5, 1234, converted_dict, 5000, 2, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(21, 1234, converted_dict, 1000, 1000, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
