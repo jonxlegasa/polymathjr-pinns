@@ -1,6 +1,4 @@
 import matplotlib
-matplotlib.use('Qt5Agg')
-
 import matplotlib.pyplot as plt
 import numpy as np
 import json
@@ -10,19 +8,36 @@ from matplotlib.widgets import Button, Slider
 from typing import Dict, List, Callable, Optional, Tuple, Any
 from dataclasses import dataclass
 
+# Try to find a working interactive backend
+def setup_backend():
+    """
+    Try different backends until one works.
+    """
+    backends = ['Qt5Agg', 'TkAgg', 'GTK3Agg', 'WXAgg']
+
+    for backend in backends:
+        try:
+            matplotlib.use(backend, force=True)
+            # Test if backend works
+            fig = plt.figure()
+            plt.close(fig)
+            print(f"Using backend: {backend}")
+            return True
+        except (ImportError, ModuleNotFoundError):
+            continue
 
 @dataclass
 class PlotConfig:
-  """Configuration for a single plot/subplot."""
-  data_key: str  # Key to access data in the data dictionary
-  title: str
-  xlabel: str
-  ylabel: str
-  plot_type: str = 'line'  # 'line', 'scatter', 'semilogy', etc.
-  colors: Optional[List[str]] = None
-  linestyles: Optional[List[str]] = None
-  labels: Optional[List[str]] = None
-  grid: bool = True
+    """Configuration for a single plot/subplot."""
+    data_key: str  # Key to access data in the data dictionary
+    title: str
+    xlabel: str
+    ylabel: str
+    plot_type: str = 'line'  # 'line', 'scatter', 'semilogy', etc.
+    colors: Optional[List[str]] = None
+    linestyles: Optional[List[str]] = None
+    labels: Optional[List[str]] = None
+    grid: bool = True
 
 
 @dataclass
@@ -238,12 +253,9 @@ class GeneralizedVisualizer:
       else:
         x_data = np.arange(len(data))
         y_data = data
-      
       label = config.labels[0] if config.labels else 'Data'
-      
       # Ensure positive values for log scale
       y_data = np.maximum(y_data, 1e-10)
-      
       line, = ax.semilogy(x_data, y_data, label=label, lw=2)
       self.lines[plot_idx].append(line)
   
@@ -257,10 +269,8 @@ class GeneralizedVisualizer:
         else:
           x_data = np.arange(len(values))
           y_data = values
-        
         color = config.colors[idx] if config.colors and idx < len(config.colors) else None
         label = config.labels[idx] if config.labels and idx < len(config.labels) else str(key)
-        
         scatter = ax.scatter(x_data, y_data, color=color, label=label, s=20)
         self.lines[plot_idx].append(scatter)
     else:
@@ -279,19 +289,19 @@ class GeneralizedVisualizer:
   def _get_plot_data(self, data_key: str) -> Optional[Any]:
     """
     Retrieve data for plotting based on current slider values.
-    
+
     Parameters:
     -----------
     data_key : str
       Key to access data in self.data_dict
-      
+
     Returns:
     --------
     Data for plotting (format depends on plot type)
     """
     # This is a flexible method that can be overridden for custom data retrieval
     # For now, it supports basic key lookup and slider-dependent data
-    
+
     if '.' in data_key:
       # Support nested keys like 'neuron_data.predictions'
       keys = data_key.split('.')
@@ -334,7 +344,7 @@ class GeneralizedVisualizer:
         valinit=config.valinit,
         valstep=config.valstep
       )
-      
+
       # Register callback
       slider.on_changed(lambda val, name=config.name: self._on_slider_change(name, val))
       self.sliders[config.name] = slider
@@ -342,7 +352,7 @@ class GeneralizedVisualizer:
   def _on_slider_change(self, slider_name: str, value: float):
     """
     Callback when any slider changes.
-    
+
     Parameters:
     -----------
     slider_name : str
@@ -379,7 +389,7 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
   """
   Specialized visualizer for power series analysis with multiple plots.
   """
-  
+
   def __init__(self,
          json_file_path: str,
          true_coefficients: List[float],
@@ -390,7 +400,7 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
          initial_neurons: Optional[int] = None):
     """
     Initialize the power series visualizer.
-    
+
     Parameters:
     -----------
     json_file_path : str
@@ -416,16 +426,16 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
     # Load predicted coefficients
     with open(json_file_path, 'r') as f:
       predicted_coeffs = json.load(f)
-    
+
     predicted_coeffs = {int(k): np.array(v) for k, v in predicted_coeffs.items()}
     neuron_counts = sorted(predicted_coeffs.keys())
-    
+
     if neuron_range is None:
       neuron_range = (min(neuron_counts), max(neuron_counts))
-    
+
     if initial_neurons is None:
       initial_neurons = min(neuron_counts)
-    
+
     true_coefficients = np.array(true_coefficients)
     x_data = np.linspace(x_range[0], x_range[1], num_points)
     
@@ -601,16 +611,16 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
       error_data = self.data_dict['coeff_errors'][neuron_count]
       # Return single series for error plot
       return {'error': {'x': error_data['x'], 'y': error_data['y']}}
-    
+
     elif data_key == 'solution_errors':
       error_data = self.data_dict['solution_errors'][neuron_count]
       # Return single series for error plot
       return {'error': {'x': error_data['x'], 'y': error_data['y']}}
-    
+
     elif data_key == 'loss_data':
       if 'loss_data' not in self.data_dict:
         return None
-      
+
       loss_info = self.data_dict['loss_data'][neuron_count]
       # Return all loss components
       result = {}
@@ -623,5 +633,5 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
       if 'supervised_loss' in loss_info:
         result['Supervised'] = {'x': loss_info['iterations'], 'y': loss_info['supervised_loss']}
       return result
-    
+
     return None

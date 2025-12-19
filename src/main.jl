@@ -86,11 +86,11 @@ function init_batches(batch_sizes::Array{Int})
       batch_sizes: Array of integers representing different batch sizes
   """
 
-  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir, 5)
+  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir, 21)
 
   # generate training datasets and benchmarks 
   for (batch_index, k) in enumerate(batch_sizes)
-    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir, 5)
+    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir, 21)
     # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
 
@@ -121,7 +121,7 @@ function init_batches(batch_sizes::Array{Int})
 
     # code for scalar multiples of the coefficients of one ODE
     array_of_matrices = Matrix{Int64}[]
-    beginning_alpha_matrix = reshape([1, 1], 2, 1)  # 2x1 Matrix{Int64}
+    beginning_alpha_matrix = reshape([3, 4], 2, 1)  # 2x1 Matrix{Int64}
     push!(array_of_matrices, beginning_alpha_matrix)
 
     for n in 1:10
@@ -192,13 +192,14 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   xs = range(x_left, x_right, length=num_points)
 
-  # neurons_counts = Dict("twenty_neurons" => 20, "forty_neurons" => 40, "eighty_neurons" => 80)
-  # scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  neurons_counts = Dict("twenty_neurons" => 20, "forty_neurons" => 40, "eighty_neurons" => 80)
+  scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
   # this increase the neuron count in an iterative process
-  # scaling_neurons(scaling_neurons_settings, neurons_counts)
+  scaling_neurons(scaling_neurons_settings, neurons_counts)
 
   # This code is for the classic training scheme for no change in neuron count or whatever
+  #= 
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
@@ -222,6 +223,7 @@ function run_training_sequence(batch_sizes::Array{Int})
     function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
     println(function_error)
   end
+  =#
 
   #=
     result = grid_search_2d(
