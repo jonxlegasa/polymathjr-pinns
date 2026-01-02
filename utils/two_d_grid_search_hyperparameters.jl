@@ -29,14 +29,15 @@ end
 Train and evaluate a single weight configuration.
 Returns an objective value (lower is better).
 """
-function evaluate_weight_configuration(training_dataset, benchmark_dataset, weights::NamedTuple,
-  num_supervised, N, x_left, x_right, xs;
-  base_data_dir="data/grid_search")
-
+function evaluate_weight_configuration(neuron_count, training_dataset, benchmark_dataset, weights::NamedTuple,
+num_supervised, N, x_left, x_right, xs, base_data_dir)
   # Extract weights
   supervised_weight = weights.supervised
   bc_weight = weights.bc
   pde_weight = weights.pde
+
+  # iteration_dir = joinpath(base_data_dir, "test")
+  # mkpath(iteration_dir)
 
   # Create directory for this configuration
   config_dir = joinpath(base_data_dir,
@@ -50,34 +51,28 @@ function evaluate_weight_configuration(training_dataset, benchmark_dataset, weig
 
   # Train with current weight configuration
   for (run_idx, inner_dict) in training_dataset
-
     data_directories = [
       joinpath(config_dir, "function_comparison.png"),
       joinpath(config_dir, "coefficient_comparison.png"),
       joinpath(config_dir, "adam_iteration_and_loss_comparison.png"),
       joinpath(config_dir, "lbfgs_iteration_and_loss_comparison.png"),
       joinpath(config_dir, "iteration_plot.png"),
+
       joinpath(config_dir, "iteration_output.csv"),
     ]
-
-    println("  Training with weights: supervised=$(supervised_weight), bc=$(bc_weight), pde=$(pde_weight)")
-
     converted_dict = convert_plugboard_keys(inner_dict)
-    settings = PINNSettings(21, 1234, converted_dict, 1000, 1000, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+
+    float_converted_dict = Dict{Matrix{Float32}, Any}()
+    for (mat, series) in converted_dict
+      float_converted_dict[Float32.(mat)] = series
+    end
+
+    settings = PINNSettings(neuron_count, 1234, float_converted_dict, 100000, 1, num_supervised, N, 1000, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
     function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
     println(function_error)
-
-    # Train the network
-
-    # Evaluate and compute error metric
-    # You will need to define what metric you want to optimize
-    # error = compute_objective_metric(settings, p_trained, coeff_net, st, inner_dict)
-
-    # total_error += error
-    # num_runs += 1
 
     total_error += function_error
   end
@@ -92,14 +87,14 @@ end
 
 Perform 2D grid search over two hyperparameters.
 """
-function grid_search_2d(training_dataset, benchmark_dataset,
+function grid_search_2d(neuron_count, training_dataset, benchmark_dataset,
   weight1::Symbol, weight1_range::Tuple{Float64,Float64},
   weight2::Symbol, weight2_range::Tuple{Float64,Float64},
   num_points::Int;
   fixed_weights::NamedTuple,
   num_supervised, N, x_left, x_right,
   xs,
-  base_data_dir="data/grid_search")
+  base_data_dir)
 
   println("Starting 2D grid search")
   println("Weight 1: $(weight1), Range: $(weight1_range)")
@@ -129,9 +124,9 @@ function grid_search_2d(training_dataset, benchmark_dataset,
       weights = create_weight_tuple(weight1, w1, weight2, w2, fixed_weights)
 
       # Evaluate this configuration
-      objective_value = evaluate_weight_configuration(
+      objective_value = evaluate_weight_configuration(neuron_count,
         training_dataset, benchmark_dataset, weights, num_supervised, N,
-        x_left, x_right, xs; base_data_dir=base_data_dir
+        x_left, x_right, xs, base_data_dir
       )
 
       objective_matrix[j, i] = objective_value
@@ -295,14 +290,15 @@ function visualize_search_results(result::GridSearchResult,
   max_obj = maximum(obj_matrix)
   obj_range = max_obj - min_obj
 
-  num_levels = max(5, min(30, Int(round(obj_range * 10))))
+  # num_levels = max(5, min(30, Int(round(obj_range * 10))))
   # num_levels = 10.0 .^ range(-2, 2, length=20) 
   # num_levels = 12
   # num_levels = 20
-  println("Objective value range: $(min_obj) to $(max_obj)")
-  println("Using $(num_levels) contour levels")
+  # println("Objective value range: $(min_obj) to $(max_obj)")
+  # println("Using $(num_levels) contour levels")
 
   # Create contour plot
+  #=
   p = contour(w1_values, w2_values, obj_matrix,
     xlabel=String(weight1),
     ylabel=String(weight2),
@@ -312,6 +308,7 @@ function visualize_search_results(result::GridSearchResult,
     linewidth=2,
     color=:magma,
     fill=false)
+  =# # NO CONTOUR MAP, LOSS IS TOO GREAT
 
   # Add grid points as scatter plot
   # Create all combinations of w1 and w2 values
@@ -328,14 +325,15 @@ function visualize_search_results(result::GridSearchResult,
   # Mark the best point
   best_w1 = result.best_weights[weight1]
   best_w2 = result.best_weights[weight2]
+  #=
   scatter!([best_w1], [best_w2],
     marker=:star,
     markersize=10,
     color=:pink,
     label="Best (obj=$(round(result.best_objective, digits=4)))")
-
+  =#
   # Save plot
-  savefig(p, joinpath(base_data_dir, "hyperparameter_contour.png"))
+  # savefig(p, joinpath(base_data_dir, "hyperparameter_contour.png"))
 
   # Create 3D surface plot
   p3d = surface(w1_values, w2_values, obj_matrix,
@@ -363,7 +361,7 @@ function visualize_search_results(result::GridSearchResult,
   savefig(p3d, joinpath(base_data_dir, "hyperparameter_surface.png"))
 
   println("\nVisualizations saved to:")
-  println("  - $(joinpath(base_data_dir, "hyperparameter_contour.png"))")
+  # println("  - $(joinpath(base_data_dir, "hyperparameter_contour.png"))")
   println("  - $(joinpath(base_data_dir, "hyperparameter_surface.png"))")
 end
 
@@ -481,6 +479,3 @@ end
 export GridSearchResult, grid_search_2d, random_search_2d
 
 end
-
-
-

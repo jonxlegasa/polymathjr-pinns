@@ -123,7 +123,7 @@ function initialize_network(settings::PINNSettings)
   max_input_size = maximum(prod(size(alpha_matrix_key)) for (alpha_matrix_key, series_coeffs) in settings.ode_matrices) # AHHHHH! what a messs
 
   coeff_net = Lux.Chain(
-    Lux.Dense(max_input_size, N, σ),      # First hidden layer or the input layer? for now this is the input layer
+    Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ? 
     Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
@@ -206,7 +206,7 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st)
     # println("The local loss is locally lossing...")
     # alpha_matrix = eval(Meta.parse(alpha_matrix_key)) # convert from string to matrix 
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
-    boundary_condition = series_coeffs[1]  # copy this
+    boundary_condition = [series_coeffs[1], series_coeffs[2]]  # copy this
     local_loss, local_loss_bc, local_loss_pde, local_loss_supervised = loss_fn(p_net, series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings) # calculate the local loss
     # println(local_loss)
     total_loss += local_loss # add up the local loss to find the global loss
@@ -228,6 +228,7 @@ function global_loss(p_net, settings::PINNSettings, coeff_net, st)
   #     total_loss_supervised=normalized_loss_supervised
   #   )
   # end
+
   losses = (
         bc = total_local_loss_bc / num_of_training_examples,
         pde = total_local_loss_pde / num_of_training_examples,
@@ -249,10 +250,9 @@ function train_pinn(settings::PINNSettings, csv_file::Any)
   # Initialize network
   coeff_net, p_init_ca, st = initialize_network(settings)
 
-
   history = []
   latest_metrics = Ref((0.0f0, 0.0f0, 0.0f0))
-  # initialize_loss_buffer()
+  initialize_loss_buffer()
   # global_loss_tuple = Tuple{Int64, Float64, Float64, Float64, Float64}[] # this will store the global loss per iteration milestone
   # Create wrapper function for optimization
 
@@ -275,14 +275,9 @@ function train_pinn(settings::PINNSettings, csv_file::Any)
         pde = pde,
         supervised = sup
     ))
-    
+
     return false # Return true if you want to trigger early stopping
   end
-
-
-
-
-
 
   # ---------------- Stage 1: ADAM ----------------
   println("Starting Adam training...")
@@ -341,7 +336,7 @@ end
 # This is then represented as a TaylorSeries 
 
 function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, benchmark_dataset, data_directories)
-  println(benchmark_dataset)
+  # println(benchmark_dataset)
   converted_benchmark_dataset = convert_plugboard_keys(benchmark_dataset)
   fact = factorial.(big.(0:settings.n_terms_for_power_series)) # I am not considering this in the series. The PINN will guess the coefficients
 
@@ -352,17 +347,32 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     # we need to compute the loss from the PINNs guess and the real function
     # We will then use this for our contour maps
     matrix_flat = vec(alpha_matrix_key)  # Flatten to a column vector
-    boundary_condition = benchmark_series_coeffs[1]
+    boundary_condition = [benchmark_series_coeffs[1], benchmark_series_coeffs[2]]  # copy this
+    # boundary_condition = benchmark_series_coeffs[1]
     # benchmark_loss, _, _, _ = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings, data_directories[5])
     benchmark_loss, _, _, _ = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings)
     loss += benchmark_loss
 
     a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1] # extract learned coefficients
 
-    u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series)
-    # this is the taylor series that is predicted by the PINN
+    """
+    This was originally here for getting the power series representation of the solution.
+    Instead for evaluation the function we will use the analytic solution for the ODE
+    """
+    # NOTE: THIS WILL STILL BE USED, I JUST HAVE TO FIGUERE OUT WHERE 
+    # u_real_func(x) = sum(benchmark_series_coeffs[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series) # very badd
 
-    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series)
+    # ODE Matrix [1; 6; 2;;]
+    roots = quadratic_formula(1, 6, 2) # this gets us the roots of the analytic solution to y'' + 6y' + 2y = 0
+    c1 = (3 * roots[2] - 5) * (1/(roots[2] - roots[1]))
+    c2 = (-3 * roots[1] + 5) * (1/(roots[2] - roots[1])) # solve the boundary condition
+
+    println("c1: $c1")
+    println("c2: $c2")
+    println(roots)
+
+    u_real_func(x) = c1 * exp(roots[1] * x) + c2 * exp(roots[2] * x) # a solution for D<0.
+    u_predict_func(x) = sum(a_learned[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series) # This will stay the same
 
     # Generate plotting points
     x_plot = settings.x_left:F(0.01):settings.x_right
@@ -381,6 +391,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       title="ODE Solution Comparison",
       xlabel="x",
       ylabel="u(x)",
+      yscale=:log10,
       legend=:best)
 
     plot!(function_comparison, x_plot, u_predict,

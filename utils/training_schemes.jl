@@ -6,6 +6,8 @@ using .PINN
 include("../utils/helper_funcs.jl")
 using .helper_funcs
 
+include("../utils/two_d_grid_search_hyperparameters.jl")
+using .TwoDGridSearchOnWeights
 
 struct TrainingSchemesSettings
   training_dataset::Dict{String,Dict{String,Any}}
@@ -28,7 +30,7 @@ function scaling_neurons(settings::TrainingSchemesSettings, neurons_counts::Dict
     for (run_idx, inner_dict) in settings.training_dataset
       converted_dict = convert_plugboard_keys(inner_dict)
 
-      pinn_settings = PINNSettings(neuron_count, 1234, converted_dict, 50, 1, settings.num_supervised, settings.N, settings.num_points, settings.x_left, settings.x_right, settings.supervised_weight, settings.bc_weight, settings.pde_weight, settings.xs)
+      pinn_settings = PINNSettings(neuron_count, 1234, converted_dict, 10000, 1, settings.num_supervised, settings.N, settings.num_points, settings.x_left, settings.x_right, settings.supervised_weight, settings.bc_weight, settings.pde_weight, settings.xs)
       # Convert the alpha matrix keys from strings to matrices
       # Because zygote is being mean
       base_data_dir = "data"
@@ -52,6 +54,31 @@ function scaling_neurons(settings::TrainingSchemesSettings, neurons_counts::Dict
   end
 end
 
-export TrainingSchemesSettings, scaling_neurons
+# Envokes the grid_search with increasing neuron count
+function grid_search_at_scale(settings::TrainingSchemesSettings, neurons_counts::Dict{String,Int})
+  for (filename, neuron_count) in neurons_counts
+    println("Starting grid search with $neuron_count neurons")
+    result = grid_search_2d(
+      neuron_count,
+      settings.training_dataset,
+      settings.benchmark_dataset,
+      :pde, (0.1, 1.0),  # supervised weight range
+      :supervised, (0.1, 1.0),           # bc weight range
+      100,                          # nxn grid search
+      fixed_weights=(bc=1.0,),
+      num_supervised=10, # num_supervised N output of coefficients
+      N=10,
+      x_left=0.0f0,
+      x_right=10.0f0,
+      xs=settings.xs,
+      base_data_dir="./data/$filename/grid_search"
+    )
+  end
+
+  println("Good luck ;)")
+  println(result)
+end
+
+export TrainingSchemesSettings, scaling_neurons, grid_search_at_scale
 
 end

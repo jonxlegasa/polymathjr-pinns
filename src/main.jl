@@ -86,11 +86,11 @@ function init_batches(batch_sizes::Array{Int})
       batch_sizes: Array of integers representing different batch sizes
   """
 
-  benchmark_dataset_setting::Settings = Plugboard.Settings(1, 0, 1, benchmark_data_dir, 21)
+  benchmark_dataset_setting::Settings = Plugboard.Settings(2, 0, 1, benchmark_data_dir, 10)
 
   # generate training datasets and benchmarks 
   for (batch_index, k) in enumerate(batch_sizes)
-    training_dataset_setting::Settings = Plugboard.Settings(1, 0, k, training_data_dir, 21)
+    training_dataset_setting::Settings = Plugboard.Settings(2, 0, k, training_data_dir, 10)
     # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
 
@@ -98,8 +98,8 @@ function init_batches(batch_sizes::Array{Int})
     println("Generating datasets for training and benchmarks $run_number_formatted")
     println("="^50)
     println("Number of examples: ", k)
-    #=
 
+    #=
     #  linear combination of coefficients of the ODEs
     Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # create training data
     # create_training_run_dirs(batch_index, k) # Create the training dirs
@@ -120,6 +120,7 @@ function init_batches(batch_sizes::Array{Int})
     =#
 
     # code for scalar multiples of the coefficients of one ODE
+    #= 
     array_of_matrices = Matrix{Int64}[]
     beginning_alpha_matrix = reshape([3, 4], 2, 1)  # 2x1 Matrix{Int64}
     push!(array_of_matrices, beginning_alpha_matrix)
@@ -127,11 +128,22 @@ function init_batches(batch_sizes::Array{Int})
     for n in 1:10
       push!(array_of_matrices, beginning_alpha_matrix * (n))
     end
-
-    Plugboard.generate_ode_dataset_from_array_of_alpha_matrices(training_dataset_setting, 1, array_of_matrices)
-    Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, beginning_alpha_matrix * 11)
+    =#
 
     # test_matrix = [1; 1;;]
+    # Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
+
+    # n = 10 # this will the number of matrices we create
+    # array_of_matrices = create_matrix_array(n)
+
+    # test_matrix = [1; 6; 2;;]
+    test_matrix = [1; 6; 2;;]
+    #=
+    Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
+    Plugboard.generate_random_ode_dataset(benchmark_dataset_setting, batch_index)
+    =#
+
+    # Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
     # Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
   end
 end
@@ -176,7 +188,6 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   N = 21 # The degree of the highest power term in the series.
 
-  # Pre-calculate factorials (0!, 1!, ..., N!) for use in the series.
   num_supervised = 21 # The number of coefficients we will supervise during training.
   # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
   num_points = 10
@@ -192,14 +203,14 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   xs = range(x_left, x_right, length=num_points)
 
-  neurons_counts = Dict("twenty_neurons" => 20, "forty_neurons" => 40, "eighty_neurons" => 80)
-  scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  # neurons_counts = Dict("twenty_neurons" => 20, "forty_neurons" => 40, "eighty_neurons" => 80)
+  # scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
   # this increase the neuron count in an iterative process
-  scaling_neurons(scaling_neurons_settings, neurons_counts)
+  # scaling_neurons(scaling_neurons_settings, neurons_counts)
 
   # This code is for the classic training scheme for no change in neuron count or whatever
-  #= 
+  #=
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
@@ -213,6 +224,7 @@ function run_training_sequence(batch_sizes::Array{Int})
       joinpath(iteration_dir, "adam_iteration_and_loss_comparison.png"),
       joinpath(iteration_dir, "lbfgs_iteration_and_loss_comparison.png"),
       joinpath(iteration_dir, "iteration_plot.png"),
+
       joinpath(iteration_dir, "iteration_output.csv"),
     ]
     converted_dict = convert_plugboard_keys(inner_dict)
@@ -222,14 +234,16 @@ function run_training_sequence(batch_sizes::Array{Int})
       float_converted_dict[Float32.(mat)] = series
     end
 
-    settings = PINNSettings(21, 1234, float_converted_dict, 500, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(100, 1234, float_converted_dict, 100, 1, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
     function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
     println(function_error)
   end
+
   =#
+
 
   #=
     result = grid_search_2d(
@@ -245,14 +259,25 @@ function run_training_sequence(batch_sizes::Array{Int})
       x_right=1.0f0,
       xs=xs
     )
+  =#
 
-    =#
-
-  println("Good luck ;)")
+  scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  neurons_counts = Dict(
+    "ten_neurons" => 10,
+    "twenty_neurons" => 20,
+    "thirty_neurons" => 30,
+    "forty_neurons" => 40,
+    "fifty_neurons" => 50,
+    "sixty_neurons" => 60,
+    "seventy_neurons" => 70,
+    "eighty_neurons" => 80,
+    "ninety_neurons" => 90,
+    "hundred_neurons" => 100
+  )
+  grid_search_at_scale(scaling_neurons_settings, neurons_counts)
   # println(result)
 end
 
-
-batch = [2]
+batch = [1000]
 
 run_training_sequence(batch)

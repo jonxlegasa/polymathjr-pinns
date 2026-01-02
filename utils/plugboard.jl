@@ -13,18 +13,6 @@ struct Settings
   num_of_terms::Int
 end
 
-function get_user_inputs()
-  println("The Plugboard: Randomized ODE Generator")
-  println("=================================")
-  print("What order do you want your ODE to be? (e.g., 1 for first order, 2 for second order): ")
-  ode_order = parse(Int, readline())
-  print("What is the highest degree polynomial you want? (e.g., 2 for degree 2): ")
-  poly_degree = parse(Int, readline())
-  print("How many ODEs do you want solved? (e.g., 50 for 50 training examples): ")
-  dataset_size = parse(Int, readline())
-  return ode_order, poly_degree, dataset_size
-end
-
 # Generate random alpha matrix - unchanged
 function generate_random_alpha_matrix(ode_order, poly_degree)
   rows = ode_order + 1
@@ -36,6 +24,46 @@ function generate_random_alpha_matrix(ode_order, poly_degree)
     end
   end
   return α_matrix
+end
+
+# Generate matrices based on the constraint a^2 - 4b > 0
+function generate_random_alpha_matrix_with_constraint(ode_order, poly_degree)
+  rows = ode_order + 1
+  cols = poly_degree + 1
+  # Special handling for the constraint case (3x1 matrix)
+  if rows == 3 && cols == 1
+    # Generate column matrix [1, a, b]^T with constraint a² - 4b > 0
+    constraint_satisfied = false
+    a = 0
+    b = 0
+    while !constraint_satisfied
+      a = rand(Bool) ? rand(-10:-1) : rand(1:10)
+      max_b_float = (a^2) / 4
+      max_b = floor(Int, max_b_float)
+      # Choose b to satisfy the constraint (excluding zero)
+      if max_b >= 1
+        b = rand(1:max_b)
+      elseif max_b >= -10 && max_b < 0
+        b = rand(max_b:-1)
+      else
+        b = rand(-10:-1)
+      end
+      # Check if constraint is satisfied and b is not zero
+      if a^2 - 4*b > 0 && b != 0
+        constraint_satisfied = true
+      end
+    end
+  return reshape([1, a, b], 3, 1) 
+  else
+    # Original behavior for other matrix sizes
+    α_matrix = Matrix{Int}(undef, rows, cols)
+    for i in 1:rows
+      for j in 1:cols
+        α_matrix[i, j] = rand(Bool) ? rand(-10:-1) : rand(1:10)
+      end
+    end
+    return α_matrix
+  end
 end
 
 # Factorial product - keep the same
@@ -114,7 +142,8 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
 
   # Generate dataset_size examples
   for example_k in 1:s.dataset_size
-    α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+    # α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+    α_matrix = generate_random_alpha_matrix_with_constraint(s.ode_order, s.poly_degree) # generate ODE matrix
     println("\n--- Example #$example_k ---")
     println("α matrix:")
     display(α_matrix)
@@ -173,8 +202,8 @@ function generate_specific_ode_dataset(s::Settings, batch_index::Int, α_matrix:
   initial_conditions = Float64[]
   for i in 0:(ode_order-1)
     if i == 0
-      push!(initial_conditions, 1.0)  # y(0) = a_0, we will set thie init condition to be 1
-      # push!(initial_conditions, rand(1:5))  # y(0) = a_0
+      # push!(initial_conditions, 1.0)  # y(0) = a_0, we will set thie init condition to be 1
+      push!(initial_conditions, rand(1:5))  # y(0) = a_0
       println("y(0) = ", initial_conditions[end])
     elseif i == 1
       push!(initial_conditions, rand(1:5))  # y'(0) = a_1
@@ -219,11 +248,11 @@ function generate_ode_dataset_from_array_of_alpha_matrices(s::Settings, batch_in
   initial_conditions = Float64[]
   for i in 0:(ode_order-1)
     if i == 0
-      # push!(initial_conditions, rand(1:5))  # y(0) = a_0
-      push!(initial_conditions, 1)  # y(0) = a_0, #NOTE:We want to make it so that a_0 = 0 to ensure that all solution vectors are linearly dependent
+      push!(initial_conditions, rand(1:10))  # y(0) = a_0
+      # push!(initial_conditions, 1)  # y(0) = a_0
       println("y(0) = ", initial_conditions[end])
     elseif i == 1
-      push!(initial_conditions, rand(1:5))  # y'(0) = a_1
+      push!(initial_conditions, rand(1:11))  # y'(0) = a_1
       println("y'(0) = ", initial_conditions[end])
     end
   end

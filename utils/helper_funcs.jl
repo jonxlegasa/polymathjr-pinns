@@ -96,6 +96,75 @@ function get_buffer_size()
   return length(loss_buffer[])
 end
 
-export convert_plugboard_keys, initialize_loss_buffer, buffer_loss_values, write_buffer_to_csv, get_buffer_size
 
+# this will be a reference for our new analytic_sol_fun
+# analytic_sol_func(x) = (pi * x * (-x + (pi^2) * (2x - 3) + 1) - sin(pi * x)) / (pi^3) # We replace with our training examples
+
+"""
+This function will give us all the types of solutions for the homogenous ODE y'' + ay' + by = 0
+depending on the discriminats value
+"""
+
+#=
+
+function exponential_solution(x, c1, c2, α, β, D)
+  if D > 0
+    return c1 * exp(α * x) + c2 * exp(β * x)
+  elseif D = 0
+    return (c1 + c2 * x) * exp((-α * x)/2)
+  elseif D < 0
+    return exp(α * x) * (c1 * cos(β * x) + c2 * sin(β * x))
+  end
+end
+
+=#
+
+"""
+Quadratic formula, this will be used for our analytic function we have. This will determine the roots of the function
+"""
+function quadratic_formula(a, b, c)
+  discr = b^2 - 4*a*c
+  # Handle complex roots if discriminant is negative
+  sq = (discr > 0) ? sqrt(discr) : sqrt(discr + 0im)
+  roots = [(-b - sq) / (2a), (-b + sq) / (2a)]
+  return sort(roots, by=real, rev=true)  # Sort by real part, descending
+end
+
+
+# Generate random values for a and b that satisfy a² - 4b > 0
+# Strategy: choose a first, then choose b such that b < a²/4
+function generate_valid_matrix()
+  a = rand(-10:10)  # Random integer for a
+  max_b_float = (a^2) / 4 - 1  # Subtract 1 to ensure strict inequality with integers
+  max_b = floor(Int, max_b_float)  # Convert to integer
+
+  # Only generate b if max_b is positive
+  if max_b > 0
+    b = rand(0:max_b)
+  else
+    b = 0
+  end
+
+  return reshape([1, a, b], 3, 1)  # 3x1 column matrix
+end
+
+function create_matrix_array(n::Int)
+  array_of_matrices = Matrix{Int64}[]
+
+  for i in 1:n
+    valid_matrix = generate_valid_matrix()
+
+    # Verify the constraint (optional, for debugging)
+    a = valid_matrix[2, 1]
+    b = valid_matrix[3, 1]
+    @assert a^2 - 4*b > 0 "Constraint violated: a² - 4b = $(a^2 - 4*b)"
+
+    push!(array_of_matrices, valid_matrix)
+  end
+
+  return array_of_matrices
+end
+
+
+export convert_plugboard_keys, initialize_loss_buffer, buffer_loss_values, write_buffer_to_csv, get_buffer_size, exponential_solution, quadratic_formula, generate_valid_matrix, create_matrix_array
 end
