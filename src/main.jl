@@ -1,5 +1,7 @@
 using Dates
 using JSON
+using CSV
+using DataFrames
 
 # Include util functions
 include("../utils/plugboard.jl")
@@ -8,10 +10,23 @@ using .Plugboard
 include("../utils/ProgressBar.jl")
 using .ProgressBar
 
-include("../scripts/PINN.jl")
+include("../utils/helper_funcs.jl")
+using .helper_funcs
+
+include("../utils/two_d_grid_search_hyperparameters.jl")
+using .TwoDGridSearchOnWeights
+
+include("../modelcode/PINN.jl")
 using .PINN
 
-function setup_training_run(run_number::Int64, batch_size::Any)
+include("../utils/training_schemes.jl")
+using .training_schemes
+
+#=
+This function does the following:
+Create training run directories
+=#
+function create_training_run_dirs(run_number::Int64, batch_size::Any)
   """
   Creates a training run directory and output file with specified naming convention.
   Args:
@@ -55,10 +70,13 @@ function setup_training_run(run_number::Int64, batch_size::Any)
   return training_run_dir, output_file
 end
 
+# These are the training and benchmark directories
+training_data_dir = "./data/training_dataset.json"
+benchmark_data_dir = "./data/benchmark_dataset.json"
+
 #=
-# Notes: 
-#  We want each training run to follow these batch sizes [1, 10, 50, 100]
-#   lets make this an array babyyy
+This function initializes training run batches
+and creates training and benchmark dataset
 =#
 
 function init_batches(batch_sizes::Array{Int})
@@ -67,26 +85,73 @@ function init_batches(batch_sizes::Array{Int})
   Args:
       batch_sizes: Array of integers representing different batch sizes
   """
-  for (batch_index, k) in enumerate(batch_sizes)
-    # set up plugboard for solutions to ay' + by = 0 where a,b != 0
 
+  benchmark_dataset_setting::Settings = Plugboard.Settings(2, 0, 1, benchmark_data_dir, 10)
+
+  # generate training datasets and benchmarks 
+  for (batch_index, k) in enumerate(batch_sizes)
+    training_dataset_setting::Settings = Plugboard.Settings(2, 0, k, training_data_dir, 10)
+    # set up plugboard for solutions to ay' + by = 0 where a,b != 0
     run_number_formatted = lpad(batch_index, 2, '0')
-    s::Settings = Plugboard.Settings(2, 2, k)
 
     println("\n" * "="^50)
-    println("Generating datasets for training run $run_number_formatted")
+    println("Generating datasets for training and benchmarks $run_number_formatted")
     println("="^50)
     println("Number of examples: ", k)
 
-    Plugboard.generate_random_ode_dataset(s, batch_index) # training data
-    # Plugboard.generate_random_ode_dataset(s, batch_index) # maybe create the validation JSON data
-    # Create the training dirs
-    println("\n" * "="^50)
-    println("Starting Training Run $run_number_formatted")
-    println("="^50)
-    setup_training_run(batch_index, k)
+    #=
+    #  linear combination of coefficients of the ODEs
+    Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index) # create training data
+    # create_training_run_dirs(batch_index, k) # Create the training dirs
+
+    training_dataset = JSON.parsefile(training_data_dir)
+
+    # add the ode matrices together
+    matrices_to_be_added = Matrix{Int}[
+      alpha_matrix_key
+      for (run_idx, inner_dict) in training_dataset
+      for (alpha_matrix_key, series_coeffs) in convert_plugboard_keys(inner_dict)
+    ]
+
+    linear_combination_of_matrices = reduce(+, matrices_to_be_added)
+    println("Linear combos: ", linear_combination_of_matrices)
+
+    Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, linear_combination_of_matrices)
+    =#
+
+    # code for scalar multiples of the coefficients of one ODE
+    #= 
+    array_of_matrices = Matrix{Int64}[]
+    beginning_alpha_matrix = reshape([3, 4], 2, 1)  # 2x1 Matrix{Int64}
+    push!(array_of_matrices, beginning_alpha_matrix)
+
+    for n in 1:10
+      push!(array_of_matrices, beginning_alpha_matrix * (n))
+    end
+    =#
+
+    # test_matrix = [1; 1;;]
+    # Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
+
+    # n = 10 # this will the number of matrices we create
+    # array_of_matrices = create_matrix_array(n)
+
+    # test_matrix = [1; 6; 2;;]
+    test_matrix = [1; 6; 2;;]
+    #=
+    Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
+    Plugboard.generate_random_ode_dataset(benchmark_dataset_setting, batch_index)
+    =#
+
+    # Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
+    # Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
   end
 end
+
+#= 
+This function takes the batches and their sizes and runs
+the PINN on the training dataset
+=#
 
 function run_training_sequence(batch_sizes::Array{Int})
   """
@@ -97,52 +162,123 @@ function run_training_sequence(batch_sizes::Array{Int})
   # Initialize all batches first
   init_batches(batch_sizes)
 
-  # Load the generated dataset
-  dataset = JSON.parsefile("./data/dataset.json")
+  # we only load the training data dir here
+  training_dataset = JSON.parsefile(training_data_dir)
+  benchmark_dataset = JSON.parsefile(benchmark_data_dir)
 
-  # Loop through each entry in the JSON object
-  # This is the code that is not working. Alpha matrix is seen as a number.
-  for (run_idx, inner_dict) in dataset
-    println(inner_dict)
-    for (alpha_matrix_key, series_coeffs) in inner_dict
-      # TODO: We need to setup the pinn training here
-      println("Series coefficients that will be trained soon...: $series_coeffs") # lil error checking
-      println("This is the alpha matrix: $alpha_matrix_key")
-      println("Current training run: $run_idx")
+  F = Float32
+  # We will approximate the solution u(x) with a truncated power series of degree N.
+  # BS on pde_weight with supervised and bc fixed at 1.0
 
-      # Convert string key back to matrix
-      alpha_matrix = eval(Meta.parse(alpha_matrix_key))
-      settings = PINNSettings(64, 1234, alpha_matrix, 500, 100)
+  #=
+  binary_search_weights(
+    training_dataset,
+    :pde,
+    (0, 100),
+    20,
+    fixed_weights = (supervised=supervised_weight, bc=bc_weight),
+    num_supervised = num_supervised,
+    N = N,
+    x_left = x_left,
+    x_right = x_right,
+    xs = xs,
+    base_data_dir = "data"
+  )
+  =#
 
-      #=
-      # Train the network
-      p_trained, coeff_net, st = train_pinn(settings, series_coeffs)
-      sample_matrix = [1;
-        1]
+  N = 10 # The degree of the highest power term in the series.
 
-      # Evaluate results
-      a_learned, u_func = evaluate_solution(p_trained, coeff_net, st, sample_matrix)
-      println(a_learned)
-      println(u_func)
+  num_supervised = 10 # The number of coefficients we will supervise during training.
+  # Create a set of points inside the domain to enforce the ODE. These are called "collocation points".
+  num_points = 10
 
-      =#
+  # Domain boundaries
+  x_left = F(0.0)  # Left boundary of the domain
+  x_right = F(1.0) # Right boundary of the domain
 
+  # Define a weight for the boundary condition, surpivesed coefficients, and the pde
+  supervised_weight = F(1.0)  # Weight for the supervised loss term in the total loss function.
+  bc_weight = F(1.0)# for now we are going to test the two of these to zero
+  pde_weight = F(1.0)
 
+  xs = range(x_left, x_right, length=num_points)
 
-      # TODO: Add the training implementation for the PINN Here
-      # PINN training here using:
-      # - alpha_matrix (converted from key)
-      # - series_coeffs as target
-      # - ASK VICTOR HOW TO IMPLEMENT THE PINN WITH THIS
+  # This code is for the classic training scheme for no change in neuron count or whatever
+  for (run_idx, inner_dict) in training_dataset
+    # Convert the alpha matrix keys from strings to matrices
+    # Because zygote is being mean
+    base_data_dir = "data"
+    iteration_dir = joinpath(base_data_dir, "test")
+    mkpath(iteration_dir)
+
+    data_directories = [
+      joinpath(iteration_dir, "function_comparison.png"),
+      joinpath(iteration_dir, "coefficient_comparison.png"),
+      joinpath(iteration_dir, "adam_iteration_and_loss_comparison.png"),
+      joinpath(iteration_dir, "lbfgs_iteration_and_loss_comparison.png"),
+      joinpath(iteration_dir, "iteration_plot.png"),
+
+      joinpath(iteration_dir, "iteration_output.csv"),
+    ]
+    converted_dict = convert_plugboard_keys(inner_dict)
+
+    float_converted_dict = Dict{Matrix{Float32}, Any}()
+    for (mat, series) in converted_dict
+      float_converted_dict[Float32.(mat)] = series
     end
+
+    settings = PINNSettings(100, 1234, float_converted_dict, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+
+    # Train the network
+    p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
+    function_error = evaluate_solution(settings, p_trained, coeff_net, st, benchmark_dataset["01"], data_directories)
+    println(function_error)
   end
+
+
+
+  #=
+    result = grid_search_2d(
+      training_dataset,
+      benchmark_dataset,
+      :pde, (0.1, 1.0),  # supervised weight range
+      :supervised, (0.1, 1.0),           # bc weight range
+      10,                          # 10x10 grid = 100 evaluations
+      fixed_weights=(bc=1.0,),
+      num_supervised=21,
+      N=21,
+      x_left=0.0f0,
+      x_right=1.0f0,
+      xs=xs
+    )
+  =#
+  
+  #=
+  scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  neurons_counts = Dict(
+    "ten_neurons" => 10,
+    "fifty_neurons" => 50,
+    "hundred_neurons" => 100
+  )
+
+  # grid_search_at_scale(scaling_neurons_settings, neurons_counts)
+  # println(result)
+
+  # this increase the neuron count in an iterative process
+  scaling_neurons(scaling_neurons_settings, neurons_counts)
+  =#
+
+  scaling_iterations_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  iteration_counts = Dict(
+  "thousand_iterations" => 1000,
+  "ten_thousand_iterations" => 10000,
+)
+
+  scaling_adam_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  scaling_adam(scaling_adam_settings, iteration_counts)
+
 end
 
-# making the array large will increase number of training runs.
-# each entry of the array is an interger that determines the # of examples generated in 
-# each training run
+batch = [10]
 
-batch = [1, 1, 1]
-
-# Uncomment to run the example
 run_training_sequence(batch)

@@ -9,18 +9,8 @@ struct Settings
   ode_order::Int
   poly_degree::Int
   dataset_size::Int
-end
-
-function get_user_inputs()
-  println("The Plugboard: Randomized ODE Generator")
-  println("=================================")
-  print("What order do you want your ODE to be? (e.g., 1 for first order, 2 for second order): ")
-  ode_order = parse(Int, readline())
-  print("What is the highest degree polynomial you want? (e.g., 2 for degree 2): ")
-  poly_degree = parse(Int, readline())
-  print("How many ODEs do you want solved? (e.g., 50 for 50 training examples): ")
-  dataset_size = parse(Int, readline())
-  return ode_order, poly_degree, dataset_size
+  data_dir::String
+  num_of_terms::Int
 end
 
 # Generate random alpha matrix - unchanged
@@ -36,6 +26,46 @@ function generate_random_alpha_matrix(ode_order, poly_degree)
   return α_matrix
 end
 
+# Generate matrices based on the constraint a^2 - 4b > 0
+function generate_random_alpha_matrix_with_constraint(ode_order, poly_degree)
+  rows = ode_order + 1
+  cols = poly_degree + 1
+  # Special handling for the constraint case (3x1 matrix)
+  if rows == 3 && cols == 1
+    # Generate column matrix [1, a, b]^T with constraint a² - 4b > 0
+    constraint_satisfied = false
+    a = 0
+    b = 0
+    while !constraint_satisfied
+      a = rand(Bool) ? rand(-10:-1) : rand(1:10)
+      max_b_float = (a^2) / 4
+      max_b = floor(Int, max_b_float)
+      # Choose b to satisfy the constraint (excluding zero)
+      if max_b >= 1
+        b = rand(1:max_b)
+      elseif max_b >= -10 && max_b < 0
+        b = rand(max_b:-1)
+      else
+        b = rand(-10:-1)
+      end
+      # Check if constraint is satisfied and b is not zero
+      if a^2 - 4*b > 0 && b != 0
+        constraint_satisfied = true
+      end
+    end
+  return reshape([1, a, b], 3, 1) 
+  else
+    # Original behavior for other matrix sizes
+    α_matrix = Matrix{Int}(undef, rows, cols)
+    for i in 1:rows
+      for j in 1:cols
+        α_matrix[i, j] = rand(Bool) ? rand(-10:-1) : rand(1:10)
+      end
+    end
+    return α_matrix
+  end
+end
+
 # Factorial product - keep the same
 function factorial_product_numeric(n_val, k, i)
   if k == 0
@@ -49,6 +79,7 @@ function factorial_product_numeric(n_val, k, i)
 end
 
 # New closed-form implementation
+# this just 
 function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
   rows, cols = size(α_matrix)
   m = rows - 1  # ODE order
@@ -81,7 +112,8 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
           # Check if we have this coefficient available
           if coeff_index >= 0 && coeff_index < length(series_coeffs)
             factorial_term = factorial_product_numeric(n - j, k, 0)
-            term_value = c_kj * factorial_term * series_coeffs[coeff_index+1]
+            term_value = c_kj * factorial_term * series_coeffs[coeff_index+1] # is this what they mean by SHUT OFF THE FACTORIAL !!!!
+            # term_value = c_kj * series_coeffs[coeff_index+1] # this is when we want factorial_tern off.
             sum_term += term_value
           end
         end
@@ -90,15 +122,17 @@ function solve_ode_series_closed_form(α_matrix, initial_conditions, num_terms)
 
     # Apply the closed form formula: a_{n+m} = -(1/(c_{m,0} * (n+m)!)) * sum
     factorial_nm = factorial(big(n + m))  # Use big integer for large factorials
-    denominator = c_m_0 * factorial_nm
+    # denominator = c_m_0 * factorial_nm # no this is where it is
+    denominator = c_m_0
 
     new_coeff = -sum_term / denominator
     push!(series_coeffs, new_coeff)
   end
 
-  return Taylor1(series_coeffs), series_coeffs
+  return series_coeffs
 end
 
+# just generates the json file that you see in ./data
 function generate_random_ode_dataset(s::Settings, batch_index::Int)
   ode_order = s.ode_order
   poly_degree = s.poly_degree
@@ -108,7 +142,8 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
 
   # Generate dataset_size examples
   for example_k in 1:s.dataset_size
-    α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree)
+    # α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+    α_matrix = generate_random_alpha_matrix_with_constraint(s.ode_order, s.poly_degree) # generate ODE matrix
     println("\n--- Example #$example_k ---")
     println("α matrix:")
     display(α_matrix)
@@ -125,12 +160,12 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
     end
     try
       # output taylor series and its coefficients
-      taylor_series, series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, 10)
-      println("truncated taylor series: ", taylor_series)
+      # this actually computes the taylor series
+      series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, s.num_of_terms)
       println("truncated series coefficients: ", series_coeffs)
       # read existing data
-      existing_data = if isfile("./data/dataset.json")
-        JSON.parsefile("./data/dataset.json")
+      existing_data = if isfile(s.data_dir)
+        JSON.parsefile(s.data_dir)
       else
         Dict()
       end
@@ -144,13 +179,11 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
       end
 
       # use alpha matrix as key, series coefficients as value within the dataset batch
-      existing_data[dataset_key][string(α_matrix)] = series_coeffs
+      existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems 
 
       isdir("data") || mkpath("data") # ensure a data folder exists
       json_string = JSON.json(existing_data)
-      write("./data/dataset.json", json_string)
-
-      println("\nDataset generation complete!")
+      write(s.data_dir, json_string)
     catch e
       println("failed to solve this ode: ", e)
       continue
@@ -158,5 +191,101 @@ function generate_random_ode_dataset(s::Settings, batch_index::Int)
   end
 end
 
-export Settings, generate_random_ode_dataset
+# Generate a specific benchmark from one alpha matrix
+function generate_specific_ode_dataset(s::Settings, batch_index::Int, α_matrix::Matrix{Int64})
+  ode_order = s.ode_order
+  poly_degree = s.poly_degree
+  # α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+  println("α matrix:")
+  display(α_matrix)
+  # generate exactly ode_order initial conditions
+  initial_conditions = Float64[]
+  for i in 0:(ode_order-1)
+    if i == 0
+      # push!(initial_conditions, 1.0)  # y(0) = a_0, we will set thie init condition to be 1
+      push!(initial_conditions, rand(1:5))  # y(0) = a_0
+      println("y(0) = ", initial_conditions[end])
+    elseif i == 1
+      push!(initial_conditions, rand(1:5))  # y'(0) = a_1
+      println("y'(0) = ", initial_conditions[end])
+    end
+  end
+  try
+    # output taylor series and its coefficients
+    series_coeffs = solve_ode_series_closed_form(α_matrix, initial_conditions, s.num_of_terms) # haha this was the issue 
+    println("truncated series coefficients: ", series_coeffs)
+    # read existing data
+    existing_data = if isfile(s.data_dir)
+      JSON.parsefile(s.data_dir)
+    else
+      Dict()
+    end
+    # Determine which training run this is based on existing data
+    dataset_key = lpad(batch_index, 2, '0')
+    # Initialize dataset key if it does not exist
+    if !haskey(existing_data, dataset_key)
+      existing_data[dataset_key] = Dict()
+    end
+    # use alpha matrix as key, series coefficients as value within the dataset batch
+    #  α_matrix_key = join(["[" * join(row, ", ") * "]" for row in eachrow(α_matrix)], "; ")
+
+    existing_data[dataset_key][string(α_matrix)] = series_coeffs # this is the source of our problems 
+    isdir("data") || mkpath("data") # ensure a data folder exists
+    json_string = JSON.json(existing_data)
+    write(s.data_dir, json_string)
+  catch e
+    println("failed to solve this ode: ", e)
+    return nothing
+  end
+end
+
+# This function will be used for our experiment of taking scalar multiples of the coefficients of one ODE
+function generate_ode_dataset_from_array_of_alpha_matrices(s::Settings, batch_index::Int, α_matrices::Array{Matrix{Int64}})
+  ode_order = s.ode_order
+  poly_degree = s.poly_degree
+  # α_matrix = generate_random_alpha_matrix(s.ode_order, s.poly_degree) # generate ODE matrix
+  # generate exactly ode_order initial conditions
+  initial_conditions = Float64[]
+  for i in 0:(ode_order-1)
+    if i == 0
+      push!(initial_conditions, rand(1:10))  # y(0) = a_0
+      # push!(initial_conditions, 1)  # y(0) = a_0
+      println("y(0) = ", initial_conditions[end])
+    elseif i == 1
+      push!(initial_conditions, rand(1:11))  # y'(0) = a_1
+      println("y'(0) = ", initial_conditions[end])
+    end
+  end
+  try
+    for matrix in α_matrices
+      series_coeffs = solve_ode_series_closed_form(matrix, initial_conditions, s.num_of_terms) # haha this was the issue 
+      println("truncated series coefficients: ", series_coeffs)
+      # read existing data
+      existing_data = if isfile(s.data_dir)
+        JSON.parsefile(s.data_dir)
+      else
+        Dict()
+      end
+
+      # Determine which training run this is based on existing data
+      dataset_key = lpad(batch_index, 2, '0')
+      # Initialize dataset key if it does not exist
+      if !haskey(existing_data, dataset_key)
+        existing_data[dataset_key] = Dict()
+      end
+      # use alpha matrix as key, series coefficients as value within the dataset batch
+      #  α_matrix_key = join(["[" * join(row, ", ") * "]" for row in eachrow(α_matrix)], "; ")
+
+      existing_data[dataset_key][string(matrix)] = series_coeffs # this is the source of our problems 
+      isdir("data") || mkpath("data") # ensure a data folder exists
+      json_string = JSON.json(existing_data)
+      write(s.data_dir, json_string)
+    end
+  catch e
+    println("failed to solve this ode: ", e)
+    return nothing
+  end
+end
+
+export Settings, generate_random_ode_dataset, generate_specific_ode_dataset, solve_ode_series_closed_form, generate_ode_dataset_from_array_of_alpha_matrices
 end
