@@ -268,6 +268,15 @@ function run_training_sequence(batch_sizes::Array{Int})
   scaling_neurons(scaling_neurons_settings, neurons_counts)
   =#
 
+  scaling_iterations_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  iteration_counts = Dict(
+  "thousand_iterations" => 1000,
+  "ten_thousand_iterations" => 10000,
+)
+
+  scaling_adam_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+  scaling_adam(scaling_adam_settings, iteration_counts)
+
 end
 
 batch = [10]

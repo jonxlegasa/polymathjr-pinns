@@ -124,7 +124,6 @@ function initialize_network(settings::PINNSettings)
 
   coeff_net = Lux.Chain(
     Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
-    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
@@ -356,7 +355,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     boundary_condition = [benchmark_series_coeffs[1], benchmark_series_coeffs[2]]  # copy this
     # boundary_condition = benchmark_series_coeffs[1]
     # benchmark_loss, _, _, _ = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings, data_directories[5])
-    benchmark_loss, _, _, _ = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings)
+    benchmark_loss, _, _, _ = loss_fn(p_trained, benchmark_series_coeffs, coeff_net, st, matrix_flat, boundary_condition, settings::PINNSettings) #evluate at that spot
     loss += benchmark_loss
 
     a_learned = first(coeff_net(matrix_flat, p_trained, st))[:, 1] # extract learned coefficients
@@ -431,6 +430,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     n_length_benchmark = length(benchmark_series_coeffs)
     indices = 1:n_length_benchmark
 
+    # plotlyjs()
     # Plot 2a: Compare benchmark coefficients vs learned coefficients
     coefficient_comparison = plot(indices, benchmark_series_coeffs,
       title="Coefficient Comparison",
