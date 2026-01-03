@@ -204,7 +204,6 @@ function run_training_sequence(batch_sizes::Array{Int})
   xs = range(x_left, x_right, length=num_points)
 
   # This code is for the classic training scheme for no change in neuron count or whatever
-  #=
   for (run_idx, inner_dict) in training_dataset
     # Convert the alpha matrix keys from strings to matrices
     # Because zygote is being mean
@@ -228,7 +227,7 @@ function run_training_sequence(batch_sizes::Array{Int})
       float_converted_dict[Float32.(mat)] = series
     end
 
-    settings = PINNSettings(100, 1234, float_converted_dict, 100, 1, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
+    settings = PINNSettings(100, 1234, float_converted_dict, 500, num_supervised, N, 10, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
 
     # Train the network
     p_trained, coeff_net, st = train_pinn(settings, data_directories[6]) # this is where we call the training process
@@ -236,7 +235,6 @@ function run_training_sequence(batch_sizes::Array{Int})
     println(function_error)
   end
 
-  =#
 
 
   #=
@@ -254,7 +252,8 @@ function run_training_sequence(batch_sizes::Array{Int})
       xs=xs
     )
   =#
-
+  
+  #=
   scaling_neurons_settings = TrainingSchemesSettings(training_dataset, benchmark_dataset, N, num_supervised, num_points, x_left, x_right, supervised_weight, bc_weight, pde_weight, xs)
   neurons_counts = Dict(
     "ten_neurons" => 10,
@@ -267,9 +266,10 @@ function run_training_sequence(batch_sizes::Array{Int})
 
   # this increase the neuron count in an iterative process
   scaling_neurons(scaling_neurons_settings, neurons_counts)
+  =#
 
 end
 
-batch = [1000]
+batch = [10]
 
 run_training_sequence(batch)

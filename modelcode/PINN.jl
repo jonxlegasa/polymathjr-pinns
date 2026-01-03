@@ -126,6 +126,11 @@ function initialize_network(settings::PINNSettings)
     Lux.Dense(max_input_size, settings.neuron_num, σ),      # First hidden layer or the input layer? for now this is the input layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Second hidden layer
     Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
+    Lux.Dense(settings.neuron_num, settings.neuron_num, σ), # Third hidden layer ?
     Lux.Dense(settings.neuron_num, settings.n_terms_for_power_series + 1)              # N+1? # Output layer with N+1 coefficients
   )
 
@@ -373,6 +378,8 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
     println(roots)
 
     u_real_func(x) = c1 * exp(roots[1] * x) + c2 * exp(roots[2] * x) # a solution for D<0.
+    # u_real_func(x) = exp(roots[1] * x) * ((c1 * cos(roots[2] * x)) + (c1 * sin(roots[2] * x))) # a solution for D<0.
+
     u_predict_func(x) = sum(a_learned[i] * x^(i - 1) / fact[i] for i in 1:settings.n_terms_for_power_series) # This will stay the same
 
     # Generate plotting points
@@ -494,7 +501,7 @@ function evaluate_solution(settings::PINNSettings, p_trained, coeff_net, st, ben
       title="Global Loss per Global Loss Call",
       xlabel="Loss Call",
       ylabel="Global Loss",
-      yscale=:log10
+      # yscale=:log10
     )
 
     total_bc_loss_plot = plot(
