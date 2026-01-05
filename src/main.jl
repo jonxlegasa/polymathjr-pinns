@@ -142,8 +142,8 @@ function init_batches(batch_sizes::Array{Int})
     Plugboard.generate_random_ode_dataset(benchmark_dataset_setting, batch_index)
     =#
 
-    Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
-    Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
+    # Plugboard.generate_random_ode_dataset(training_dataset_setting, batch_index)
+    # Plugboard.generate_specific_ode_dataset(benchmark_dataset_setting, 1, test_matrix)
   end
 end
 
