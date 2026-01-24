@@ -27,27 +27,13 @@
 ## Neural Network Architecture
 
 ```
-Input: [α matrix, initial conditions]
+Input: [ODE coefficients, initial conditions]
     ↓
-Dense(input → neurons, σ)
+Dense(input → neurons, activation) x 6 hidden layers
     ↓
-Dense(neurons → neurons, σ) × 6
+Dense(neurons → output_size)
     ↓
-Dense(neurons → N+1)
-    ↓
-Output: [a₀, a₁, ..., aₙ] (power series coefficients)
-```
-
----
-
-## Loss Function
-
-```
-Total Loss = pde_weight × L_pde + bc_weight × L_bc + sup_weight × L_supervised
-
-L_pde = Mean squared ODE residual at collocation points
-L_bc  = |u(x₀) - IC₁| + |u'(x₀) - IC₂|
-L_sup = MSE(predicted coefficients, true coefficients)
+Output: power series coefficients
 ```
 
 ---
@@ -62,4 +48,4 @@ L_sup = MSE(predicted coefficients, true coefficients)
 
 ---
 
-*See also: [PINN Theory](pinn-theory.md), [Power Series Approach](power-series-approach.md)*
+*See also: [Data Flow](data-flow.md), [PINN.jl](../julia-modules/pinn.md)*

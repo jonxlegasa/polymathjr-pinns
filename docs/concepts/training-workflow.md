@@ -155,4 +155,4 @@ Currently, training runs to completion without intermediate checkpoints. For lon
 
 ---
 
-*See also: [PINN.jl](../julia-modules/pinn.md), [Loss Components](loss-components.md)*
+*See also: [PINN.jl](../julia-modules/pinn.md)*

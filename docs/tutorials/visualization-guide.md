@@ -130,7 +130,7 @@ viz.show()
 
 - **Blue bars:** True coefficients
 - **Orange bars:** PINN predictions
-- **Check:** First coefficients (a₀, a₁) should match well
+- **Check:** First coefficients should match well
 
 ### 3. Coefficient Error (Log Scale)
 

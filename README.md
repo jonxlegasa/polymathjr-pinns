@@ -1,16 +1,10 @@
 # PINN Power Series ODE Solver
 
-A Physics-Informed Neural Network (PINN) that learns **power series coefficients** to approximate solutions of Ordinary Differential Equations (ODEs).
+A Physics-Informed Neural Network (PINN) that learns power series coefficients to approximate solutions of Ordinary Differential Equations (ODEs).
 
 ## Overview
 
-Instead of learning the solution function `u(x)` directly, this PINN outputs the coefficients of a truncated power series:
-
-```
-u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
-```
-
-The neural network learns to predict `[a₀, a₁, a₂, ..., aₙ]` such that the resulting power series satisfies the ODE.
+Instead of learning the solution function directly, this PINN outputs the coefficients of a truncated power series. The neural network learns to predict coefficients such that the resulting power series satisfies the ODE.
 
 ## Features
 
@@ -57,36 +51,17 @@ julia --project=. src/main.jl
 Full documentation is available in the [`docs/`](docs/README.md) directory:
 
 - **[Getting Started](docs/getting-started/installation.md)** - Installation and quickstart
-- **[Architecture](docs/architecture/overview.md)** - System design and PINN theory
+- **[Architecture](docs/architecture/overview.md)** - System design overview
 - **[Julia Modules](docs/julia-modules/pinn.md)** - Code documentation
-- **[Concepts](docs/concepts/loss-components.md)** - Mathematical background
-- **[Tutorials](docs/tutorials/custom-ode.md)** - Step-by-step guides
+- **[Tutorials](docs/tutorials/hyperparameter-search.md)** - Step-by-step guides
 - **[API Reference](docs/api-reference/julia-api.md)** - Function signatures
 
 ## How It Works
 
 1. **Dataset Generation**: `plugboard.jl` creates ODEs and computes analytical power series coefficients
 2. **Network Training**: PINN learns to predict coefficients that satisfy ODE constraints
-3. **Loss Function**: Combines PDE residual + boundary conditions + supervised coefficient loss
+3. **Loss Function**: Combines PDE residual, boundary conditions, and supervised coefficient loss
 4. **Evaluation**: Compares predicted vs true coefficients on benchmark ODE
-
-### Loss Components
-
-```
-Total Loss = pde_weight × L_pde + bc_weight × L_bc + sup_weight × L_supervised
-```
-
-- **L_pde**: ODE residual at collocation points
-- **L_bc**: Boundary condition enforcement
-- **L_supervised**: MSE of predicted vs true coefficients
-
-## Example ODE
-
-For `u'' - 5u' + 6u = 0` with `u(0) = 4, u'(0) = 2`:
-
-- α matrix: `[1; -5; 6;;]`
-- True coefficients: `[4.0, 2.0, 1.0, 1.333, ...]`
-- PINN learns to output these coefficients
 
 ## Python Visualization
 

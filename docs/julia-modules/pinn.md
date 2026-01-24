@@ -39,9 +39,9 @@ initialize_network(settings::PINNSettings) → (network, params, state)
 ```
 
 **Architecture:**
-```
-Dense(input → neurons, σ) → Dense×6 → Dense(neurons → N+1)
-```
+- 6 hidden layers with configurable neuron count
+- Sigmoid activation function
+- Output layer sized for power series coefficients
 
 ---
 
@@ -123,4 +123,4 @@ p_trained, net, st = train_pinn(settings, "output.csv")
 
 ---
 
-*See also: [Loss Functions](loss-functions.md), [Training Workflow](../concepts/training-workflow.md)*
+*See also: [Training Workflow](../concepts/training-workflow.md)*

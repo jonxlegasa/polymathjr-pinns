@@ -42,48 +42,36 @@ Zero-padded string identifier for dataset batches.
 "01", "02", ..., "10", "11", ...
 ```
 
-### α Matrix String
+### ODE Matrix String
 
-ODE coefficient matrix in Julia literal format.
-
-```
-"[1; -5; 6;;]" → u'' - 5u' + 6u = 0
-```
+ODE coefficient matrix in Julia literal format (used as dictionary key).
 
 ### Coefficient Array
 
-Power series coefficients `[a₀, a₁, a₂, ..., aₙ]`:
+Power series coefficients (array of floats):
 
 ```json
 [4.0, 2.0, 1.0, 1.333, 2.333, 4.111, ...]
 ```
 
 Where:
-- `a₀ = u(0)` (initial value)
-- `a₁ = u'(0)` (initial derivative)
-- `aₙ` computed from ODE recurrence
+- First coefficient corresponds to initial value
+- Second coefficient corresponds to initial derivative
+- Remaining coefficients computed from ODE recurrence
 
 ---
 
 ## Example Entry
 
-**ODE:** `u'' - 5u' + 6u = 0` with `u(0) = 4, u'(0) = 2`
-
 ```json
 {
   "01": {
-    "[1; -5; 6;;]": [
-      4.0,      // a₀ = u(0)
-      2.0,      // a₁ = u'(0)
-      1.0,      // a₂
-      1.333,    // a₃
-      2.333,    // a₄
-      4.111,    // a₅
-      // ... more coefficients
-    ]
+    "[1; -5; 6;;]": [4.0, 2.0, 1.0, 1.333, 2.333, 4.111]
   }
 }
 ```
+
+The ODE matrix string maps to an array of power series coefficients.
 
 ---
 
@@ -110,4 +98,4 @@ coeffs = solve_ode_series_closed_form(α, IC, 15)
 
 ---
 
-*See also: [ODE Representation](../concepts/ode-representation.md), [plugboard.jl](../julia-modules/plugboard.md)*
+*See also: [plugboard.jl](../julia-modules/plugboard.md)*

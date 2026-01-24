@@ -10,10 +10,6 @@ Utility functions for data conversion and loss logging.
 
 In-memory buffer for accumulating loss values during training.
 
-```julia
-const loss_buffer = Ref{Vector{Dict{Symbol,Float64}}}(...)
-```
-
 ### `initialize_loss_buffer()`
 
 Initializes/resets the loss buffer.
@@ -46,30 +42,23 @@ Converts JSON string keys back to Julia matrices.
 convert_plugboard_keys(dict) → Dict
 ```
 
-**Example:**
-```julia
-"[1; -5; 6;;]" → [1 -5 6] (Matrix)
-```
-
 ---
 
 ## Math Utilities
 
 ### `quadratic_formula(a, b, c)`
 
-Solves quadratic equation `ax² + bx + c = 0`.
+Solves quadratic equations. Used for computing analytical ODE solutions.
 
 ```julia
 quadratic_formula(a, b, c) → (root1, root2)
 ```
 
-Used for computing analytical ODE solutions.
-
 ---
 
 ### `generate_valid_matrix()`
 
-Generates random 3×1 matrix satisfying `a² - 4b > 0`.
+Generates random 3x1 matrix satisfying the real roots constraint.
 
 ### `create_matrix_array(n)`
 

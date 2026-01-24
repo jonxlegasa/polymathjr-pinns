@@ -4,11 +4,7 @@ Documentation for the Physics-Informed Neural Network (PINN) Power Series ODE So
 
 ## Overview
 
-This project implements a PINN that learns **power series coefficients** to approximate solutions of Ordinary Differential Equations (ODEs). The neural network outputs coefficients `[a₀, a₁, a₂, ..., aₙ]` for the power series:
-
-```
-u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
-```
+This project implements a PINN that learns power series coefficients to approximate solutions of Ordinary Differential Equations (ODEs). The neural network outputs coefficients that form a power series satisfying the ODE.
 
 ---
 
@@ -21,8 +17,6 @@ u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
 
 ### Architecture
 - [Overview](architecture/overview.md) - System architecture
-- [PINN Theory](architecture/pinn-theory.md) - Mathematical background
-- [Power Series Approach](architecture/power-series-approach.md) - Why power series coefficients
 - [Data Flow](architecture/data-flow.md) - Data pipeline
 
 ### Julia Modules
@@ -31,7 +25,6 @@ u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
 - [PINN_RNN.jl](julia-modules/pinn-rnn.md) - RNN variant
 - [PINN_specific.jl](julia-modules/pinn-specific.md) - Specialized solver
 - [plugboard.jl](julia-modules/plugboard.md) - Dataset generation
-- [loss_functions.jl](julia-modules/loss-functions.md) - Loss computation
 - [helper_funcs.jl](julia-modules/helper-funcs.md) - Utilities
 - [training_schemes.jl](julia-modules/training-schemes.md) - Training strategies
 
@@ -40,8 +33,6 @@ u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
 - [main.py](python-modules/main-examples.md) - Examples
 
 ### Concepts
-- [Loss Components](concepts/loss-components.md) - PDE, BC, Supervised losses
-- [ODE Representation](concepts/ode-representation.md) - α matrix format
 - [Hyperparameter Tuning](concepts/hyperparameter-tuning.md) - Tuning strategies
 - [Training Workflow](concepts/training-workflow.md) - Complete pipeline
 
@@ -56,7 +47,6 @@ u(x) = Σ(i=0 to N) aᵢ · xⁱ / i!
 - [Python API](api-reference/python-api.md) - Class/function signatures
 
 ### Tutorials
-- [Custom ODE](tutorials/custom-ode.md) - Adding new ODEs
 - [Hyperparameter Search](tutorials/hyperparameter-search.md) - Grid/binary search
 - [Visualization Guide](tutorials/visualization-guide.md) - Python dashboard
 - [Scaling Experiments](tutorials/scaling-experiments.md) - Neuron/iteration studies

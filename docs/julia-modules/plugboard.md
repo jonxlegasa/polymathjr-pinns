@@ -30,16 +30,11 @@ Creates random ODE coefficient matrix.
 generate_random_alpha_matrix(ode_order, poly_degree) → Matrix
 ```
 
-**Example output for 2nd order ODE:**
-```julia
-[1; -5; 6;;]  # Represents u'' - 5u' + 6u = 0
-```
-
 ---
 
 ### `generate_random_alpha_matrix_with_constraint(ode_order, poly_degree)`
 
-Generates matrices satisfying `a² - 4b > 0` (real roots condition).
+Generates matrices satisfying the real roots condition for solvability.
 
 ---
 
@@ -50,8 +45,6 @@ Computes analytical power series coefficients.
 ```julia
 solve_ode_series_closed_form(α, IC, N) → Vector{Float64}
 ```
-
-**Returns:** `[a₀, a₁, a₂, ..., aₙ]`
 
 Uses the recurrence relation derived from the ODE.
 
@@ -89,17 +82,10 @@ Generates dataset from an array of predefined matrices.
 
 ---
 
-## Factorial Product Function
+### `factorial_product_numeric(n_val, k, i)`
 
-```julia
-factorial_product_numeric(n_val, k, i)
-```
-
-Computes factorial terms for the ODE recurrence formula:
-```
-(n-j)(n-j+1)...(n-j+k-1)
-```
+Computes factorial terms for the ODE recurrence formula.
 
 ---
 
-*See also: [ODE Representation](../concepts/ode-representation.md), [Training Dataset](../data-formats/training-dataset.md)*
+*See also: [Training Dataset](../data-formats/training-dataset.md)*

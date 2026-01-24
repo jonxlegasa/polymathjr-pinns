@@ -30,10 +30,10 @@ Same format as training dataset:
 
 ## Default Benchmark
 
-**ODE:** Defined by α matrix in the JSON file
+**ODE:** Defined by coefficient matrix in the JSON file
 
 **Properties:**
-- Satisfies real roots constraint (`a² - 4b > 0`)
+- Satisfies real roots constraint for solvability
 - Has known analytical solution
 - Provides challenging but solvable test case
 

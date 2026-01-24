@@ -106,7 +106,7 @@ Look for:
 Check:
 - Early coefficients match well
 - Error grows for higher coefficients
-- BC coefficients (a₀, a₁) are accurate
+- Boundary condition coefficients are accurate
 
 ---
 
