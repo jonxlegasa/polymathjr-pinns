@@ -8,10 +8,10 @@ Instead of learning the solution function directly, this PINN outputs the coeffi
 
 ## Features
 
-- **Power Series Learning**: Neural network outputs Taylor series coefficients
+- **Power Series Learning**: Neural network outputs power series coefficients
 - **Multi-Loss Training**: Combines PDE residual, boundary conditions, and supervised losses
 - **Two-Stage Optimization**: Adam for global exploration, LBFGS for fine-tuning
-- **Interactive Visualization**: Python dashboard for analyzing results
+- **Interactive Visualization**: Python dashboard for analyzing results (oooooo....)
 
 ## Project Structure
 
